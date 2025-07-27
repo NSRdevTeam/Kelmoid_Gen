@@ -851,7 +851,7 @@ def create_gradio_interface():
                     with gr.Column():
                         plate_drawing_output = gr.Image(label="3-View Technical Drawing", type="pil")
                     with gr.Column():
-                        plate_gcode_output = gr.Code(language="gcode", label="Generated G-Code")
+                        plate_gcode_output = gr.Code(language="text", label="Generated G-Code")
                 
                 plate_status_output = gr.Textbox(label="Status")
                 
