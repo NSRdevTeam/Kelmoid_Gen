@@ -687,7 +687,7 @@ def process_text_to_cad(prompt):
 - **Color:** {params['color'].title()}
 - **Original Prompt:** "{params['prompt']}"
 
-The model has been successfully generated with both 3D visualization and orthographic views.
+The kelmoid has been successfully generated with both 3D visualization and orthographic views.
 """
         
         return fig_3d, ortho_views, summary
@@ -754,11 +754,11 @@ def process_cfd_simulation(length, height, grid_x, grid_y, inlet_vel, density, v
 def create_gradio_interface():
     """Create comprehensive Gradio interface"""
     
-    with gr.Blocks(title="CAD Engineering Suite", theme=gr.themes.Soft()) as demo:
+    with gr.Blocks(title="Kelmoid Genesis LLM Prototype", theme=gr.themes.Soft()) as demo:
         
         gr.Markdown("""
-        # 🔧 CAD Engineering Suite
-        **Comprehensive CAD tools for design, analysis, and manufacturing**
+        # 🔧 Kelmoid Genesis LLM Prototype
+        **AI-Powered CAD Engineering Suite for Design, Analysis, and Manufacturing**
         
         This suite includes:
         - 🎨 **Text-to-CAD Generator**: Create 3D models from natural language
@@ -864,7 +864,7 @@ def create_gradio_interface():
             # =====================================================
             # TAB 3: CFD SIMULATOR
             # =====================================================
-            with gr.TabItem("🌊 CFD Simulator"):
+            with gr.TabItem("🌊 kelmoid CFD Simulator"):
                 gr.Markdown("### Computational Fluid Dynamics Simulation")
                 
                 with gr.Row():
