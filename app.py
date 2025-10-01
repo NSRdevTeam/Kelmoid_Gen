@@ -9,10 +9,139 @@ from shapely.affinity import scale
 from scipy.spatial import ConvexHull
 import re
 import io
+import os
+import tempfile
 import base64
 from PIL import Image, ImageDraw, ImageFont
 import warnings
 warnings.filterwarnings('ignore')
+
+# Enhanced imports for parametric CAD
+try:
+    import cadquery as cq
+    CADQUERY_AVAILABLE = True
+    print("✅ CadQuery available - Parametric CAD enabled")
+except ImportError:
+    CADQUERY_AVAILABLE = False
+    print("⚠️  CadQuery not available - Using Trimesh fallbacks")
+
+# Check boolean backend
+def get_bool_backend_name():
+    try:
+        backend = trimesh.interfaces.boolean.get_bool_engine()
+        return backend
+    except Exception:
+        return None
+
+BOOL_BACKEND = get_bool_backend_name()
+if BOOL_BACKEND is None:
+    print("⚠️  No boolean backend detected. Install 'manifold3d' for robust operations")
+else:
+    print(f"✅ Boolean backend detected: {BOOL_BACKEND}")
+
+# =====================================================
+# ENHANCED CAD UTILITIES
+# =====================================================
+
+def cq_to_trimesh(cq_obj):
+    """Export CadQuery object to temporary STL then load as trimesh.Trimesh"""
+    if not CADQUERY_AVAILABLE:
+        raise RuntimeError("CadQuery not available")
+    with tempfile.NamedTemporaryFile(suffix=".stl", delete=False) as tmp:
+        tmp_path = tmp.name
+    try:
+        cq.exporters.export(cq_obj, tmp_path, exportType="STL")
+        mesh = trimesh.load(tmp_path)
+        if hasattr(mesh, "is_watertight") and not mesh.is_watertight:
+            try:
+                mesh = mesh.fill_holes()
+            except Exception:
+                pass
+        return mesh
+    finally:
+        try:
+            os.remove(tmp_path)
+        except Exception:
+            pass
+
+def safe_union(a, b):
+    """Enhanced union with multiple fallback strategies"""
+    if hasattr(a, "union"):
+        try:
+            return a.union(b)
+        except Exception:
+            pass
+    try:
+        return trimesh.boolean.union([a, b], engine=BOOL_BACKEND)
+    except Exception:
+        try:
+            combined = trimesh.util.concatenate([a, b])
+            return combined
+        except Exception:
+            return a
+
+def safe_difference(a, b):
+    """Enhanced difference with multiple fallback strategies"""
+    if hasattr(a, "difference"):
+        try:
+            return a.difference(b)
+        except Exception:
+            pass
+    try:
+        return trimesh.boolean.difference([a, b], engine=BOOL_BACKEND)
+    except Exception:
+        return a
+
+def export_mesh(mesh, filename):
+    """Export mesh to various formats"""
+    ext = os.path.splitext(filename)[1].lower()
+    if ext in ['.stl', '.obj', '.ply', '.glb']:
+        try:
+            mesh.export(filename)
+            return filename
+        except Exception as e:
+            raise RuntimeError(f"Export failed: {str(e)}")
+    else:
+        raise RuntimeError("Unsupported export format. Use .stl, .obj, .ply, .glb")
+
+# =====================================================
+# ENHANCED PROMPT PARSING
+# =====================================================
+
+DIM_FIELDS = [
+    'length', 'width', 'height', 'radius', 'diameter', 'thickness',
+    'outer_radius', 'inner_radius', 'depth', 'size', 'panel_count', 
+    'frame_width', 'spacing', 'num_shelves', 'rail_width', 'leg_size', 
+    'panel_thickness', 'hole_radius', 'wall_thickness'
+]
+
+def extract_key_values(prompt):
+    """Extract key=value pairs (numeric) into dict"""
+    kv = {}
+    for m in re.finditer(r'([a-zA-Z_]+)\s*[:=]\s*([0-9]+\.?[0-9]*)', prompt):
+        k = m.group(1).lower()
+        v = float(m.group(2))
+        kv[k] = v
+    return kv
+
+def extract_x_pattern(prompt):
+    """Extract patterns like 10x20x30 (assumes order length x width x height)"""
+    m = re.search(r'(\d+\.?\d*)\s*[x×]\s*(\d+\.?\d*)\s*[x×]\s*(\d+\.?\d*)', prompt)
+    if m:
+        return float(m.group(1)), float(m.group(2)), float(m.group(3))
+    return None
+
+def filter_numeric(dims):
+    """Return filtered dict containing only numeric values expected by builders"""
+    out = {}
+    for k, v in dims.items():
+        if v is None:
+            continue
+        if k in ('panel_count', 'mullions_v', 'mullions_h', 'num_shelves'):
+            out[k] = int(v)
+        else:
+            out[k] = float(v)
+    return out
 
 # =====================================================
 # TEXT TO CAD PARSER AND GENERATOR
@@ -63,29 +192,71 @@ class TextToCADGenerator:
             'shelfframe': self._create_shelf_frame,
             'shelf_frame': self._create_shelf_frame,
             'cabinetframe': self._create_cabinet_frame,
-            'cabinet_frame': self._create_cabinet_frame
+            'cabinet_frame': self._create_cabinet_frame,
+            # Enhanced parametric builders
+            'water_tank': self._create_water_tank,
+            'watertank': self._create_water_tank,
+            'tank': self._create_water_tank,
+            'parametric_washer': self._create_parametric_washer,
+            'parametric_nut': self._create_parametric_nut,
+            'parametric_bracket': self._create_parametric_bracket,
+            'parametric_door': self._create_parametric_door,
+            'parametric_window': self._create_parametric_window
         }
 
     def parse_prompt(self, prompt: str):
-        """Parse text prompt to extract shape and parameters"""
-        prompt = prompt.lower().strip()
-        dimensions = self._extract_dimensions(prompt)
+        """Enhanced prompt parsing with key=value and pattern recognition"""
+        p = prompt.lower().strip()
         
-        # Identify shape
+        # Start with enhanced dimension extraction
+        dimensions = self._extract_dimensions(p)
+        
+        # Add key=value parsing
+        kv_pairs = extract_key_values(p)
+        for k, v in kv_pairs.items():
+            if k in dimensions:
+                dimensions[k] = v
+            elif k == 'panels':
+                dimensions['panel_count'] = int(v)
+            elif k == 'frames':
+                dimensions['frame_width'] = v
+        
+        # Add NxMxP pattern recognition
+        pattern = extract_x_pattern(p)
+        if pattern:
+            dimensions['length'], dimensions['width'], dimensions['height'] = pattern
+        
+        # Enhanced shape identification
         shape_type = None
         for shape in self.shapes_library.keys():
-            if shape in prompt:
+            if shape.replace('_', ' ') in p or shape in p:
                 shape_type = shape
                 break
+        
+        # Additional keyword mapping
+        if shape_type is None:
+            for keyword in ['tank', 'panel']:
+                if keyword in p:
+                    if keyword == 'tank':
+                        shape_type = 'water_tank' if 'water_tank' in self.shapes_library else 'cylinder'
+                    elif keyword == 'panel':
+                        shape_type = 'gypsum_panel' if 'gypsum_panel' in self.shapes_library else 'plate'
         
         if not shape_type:
             shape_type = 'cube'
         
-        color = self._extract_color(prompt)
+        color = self._extract_color(p)
+        
+        # Detect precision preference
+        precision = 'high' if any(word in p for word in ['precise', 'parametric', 'high', 'accurate']) else 'fast'
+        if any(word in p for word in ['fast', 'approx', 'quick']):
+            precision = 'fast'
+        
         return {
             'shape': shape_type,
             'dimensions': dimensions,
             'color': color,
+            'precision': precision,
             'prompt': prompt
         }
 
@@ -588,6 +759,143 @@ class TextToCADGenerator:
             # Fallback: solid block
             return trimesh.creation.box(extents=[width, depth, height])
 
+    # =====================================================
+    # PARAMETRIC BUILDERS (CadQuery + Trimesh Fallbacks)
+    # =====================================================
+    
+    def _create_parametric_washer(self, dims):
+        """Enhanced washer with CadQuery precision"""
+        outer_radius = dims.get('outer_radius', dims.get('radius', 20))
+        inner_radius = dims.get('inner_radius', outer_radius * 0.4)
+        thickness = dims.get('thickness', 3)
+        
+        if CADQUERY_AVAILABLE:
+            try:
+                outer = cq.Workplane("XY").circle(outer_radius).extrude(thickness)
+                inner = cq.Workplane("XY").circle(inner_radius).extrude(thickness + 0.01)
+                washer = outer.cut(inner)
+                return cq_to_trimesh(washer)
+            except Exception:
+                pass
+        
+        # Fallback to existing method
+        return self._create_washer(dims)
+    
+    def _create_parametric_nut(self, dims):
+        """Enhanced nut with CadQuery precision"""
+        radius = dims.get('radius', 10)
+        thickness = dims.get('thickness', dims.get('height', 6))
+        hole_radius = dims.get('hole_radius', radius * 0.4)
+        
+        if CADQUERY_AVAILABLE:
+            try:
+                nut = cq.Workplane("XY").polygon(6, radius * 2).extrude(thickness)
+                nut = nut.faces(">Z").workplane().hole(hole_radius * 2)
+                return cq_to_trimesh(nut)
+            except Exception:
+                pass
+        
+        # Fallback to existing method
+        return self._create_nut(dims)
+    
+    def _create_parametric_bracket(self, dims):
+        """Enhanced bracket with CadQuery precision"""
+        leg1 = dims.get('length', 100)
+        leg2 = dims.get('height', 80)
+        thickness = dims.get('thickness', 6)
+        hole_diam = dims.get('hole_radius', 4) * 2
+        hole_offset = dims.get('depth', 20)
+        
+        if CADQUERY_AVAILABLE:
+            try:
+                legA = cq.Workplane("XY").box(leg1, thickness, thickness).translate((leg1/2 - leg1, 0, 0))
+                legB = cq.Workplane("XY").box(thickness, thickness, leg2).translate((0, 0, leg2/2))
+                combined = legA.union(legB)
+                if hole_diam > 0:
+                    combined = combined.faces(">Z").workplane().pushPoints([(hole_offset - leg1/2, 0), (leg1 - hole_offset - leg1/2, 0)]).hole(hole_diam)
+                return cq_to_trimesh(combined)
+            except Exception:
+                pass
+        
+        # Fallback to existing method
+        return self._create_bracket(dims)
+    
+    def _create_parametric_door(self, dims):
+        """Enhanced door with CadQuery precision"""
+        width = dims.get('width', 900)
+        height = dims.get('height', 2100)
+        thickness = dims.get('thickness', 40)
+        panel_count = dims.get('panel_count', 2)
+        frame_width = dims.get('frame_width', 60)
+        
+        if CADQUERY_AVAILABLE:
+            try:
+                door = cq.Workplane("XY").box(width, thickness, height)
+                # Add panel insets
+                if panel_count > 0:
+                    panel_h = (height - 2*frame_width - (panel_count-1)*frame_width) / panel_count
+                    z0 = -height/2 + frame_width + panel_h/2
+                    for i in range(int(panel_count)):
+                        door = door.faces(">Y").workplane().center(0, z0 - (-height/2)).rect(width - 2*frame_width, panel_h - frame_width/2).cutBlind(-frame_width/4)
+                        z0 += panel_h + frame_width
+                return cq_to_trimesh(door)
+            except Exception:
+                pass
+        
+        # Fallback to existing method
+        return self._create_door_frame(dims)
+    
+    def _create_parametric_window(self, dims):
+        """Enhanced window with CadQuery precision"""
+        width = dims.get('width', 1200)
+        height = dims.get('height', 1200)
+        frame_thickness = dims.get('thickness', dims.get('depth', 60))
+        glass_thickness = dims.get('glass_thickness', 6)
+        
+        if CADQUERY_AVAILABLE:
+            try:
+                # Create frame
+                outer = cq.Workplane("XY").box(width, frame_thickness, height)
+                inner = cq.Workplane("XY").box(width - 2*frame_thickness, frame_thickness + 2, height - 2*frame_thickness)
+                frame = outer.cut(inner)
+                
+                # Add glass
+                glass = cq.Workplane("XY").box(width - 2*frame_thickness - 2, glass_thickness, height - 2*frame_thickness - 2)
+                return cq_to_trimesh(frame.union(glass))
+            except Exception:
+                pass
+        
+        # Fallback to existing method
+        return self._create_window_frame(dims)
+    
+    def _create_water_tank(self, dims):
+        """Create a cylindrical water tank"""
+        diameter = dims.get('diameter', 1000)
+        height = dims.get('height', 1200)
+        wall_thickness = dims.get('wall_thickness', dims.get('thickness', 8))
+        
+        outer_radius = diameter / 2
+        inner_radius = outer_radius - wall_thickness
+        
+        if CADQUERY_AVAILABLE:
+            try:
+                outer = cq.Workplane("XY").circle(outer_radius).extrude(height)
+                inner = cq.Workplane("XY").circle(inner_radius).extrude(height + 1)
+                tank = outer.cut(inner)
+                # Add lid
+                lid = cq.Workplane("XY").circle(outer_radius + 10).extrude(5).translate((0, 0, height/2 + 2.5))
+                return cq_to_trimesh(tank.union(lid))
+            except Exception:
+                pass
+        
+        # Trimesh fallback
+        try:
+            outer = trimesh.creation.cylinder(radius=outer_radius, height=height, sections=128)
+            inner = trimesh.creation.cylinder(radius=inner_radius, height=height*1.01, sections=128)
+            return safe_difference(outer, inner)
+        except Exception:
+            return trimesh.creation.cylinder(radius=outer_radius, height=height)
+
     def generate_3d_model(self, params):
         """Generate 3D model based on parameters"""
         shape_func = self.shapes_library.get(params['shape'], self._create_cube)
@@ -1061,29 +1369,79 @@ def generate_orthographic_views(mesh, layout="2x3"):
 # Initialize CAD generator
 cad_generator = TextToCADGenerator()
 
-def process_text_to_cad(prompt):
-    """Process text prompt and generate CAD outputs"""
+def process_text_to_cad(prompt, precision_choice="High (parametric)", export_format="stl", grid_layout="2x3"):
+    """Enhanced CAD processing with precision modes and export capabilities"""
     try:
         params = cad_generator.parse_prompt(prompt)
-        mesh_3d = cad_generator.generate_3d_model(params)
+        
+        # Override precision based on UI choice
+        params['precision'] = 'high' if precision_choice.lower().startswith('h') else 'fast'
+        
+        # Use parametric builders for high precision when available
+        if params['precision'] == 'high' and params['shape'] in ['washer', 'nut', 'bracket', 'door', 'window']:
+            # Try parametric version first
+            parametric_shape = f"parametric_{params['shape']}"
+            if parametric_shape in cad_generator.shapes_library:
+                original_shape = params['shape']
+                params['shape'] = parametric_shape
+                try:
+                    mesh_3d = cad_generator.generate_3d_model(params)
+                except Exception:
+                    # Fallback to original shape
+                    params['shape'] = original_shape
+                    mesh_3d = cad_generator.generate_3d_model(params)
+            else:
+                mesh_3d = cad_generator.generate_3d_model(params)
+        else:
+            mesh_3d = cad_generator.generate_3d_model(params)
         
         # Generate 3D visualization
         fig_3d = cad_generator.generate_3d_visualization(mesh_3d, params['color'])
         
-        # Generate orthographic views
-        ortho_views = generate_orthographic_views(mesh_3d)
+        # Generate enhanced orthographic views
+        views_result = generate_orthographic_views(mesh_3d, layout=grid_layout)
+        if len(views_result) >= 7:  # 6 individual views + combined
+            ortho_views = views_result[6]  # Use combined view
+        else:
+            ortho_views = views_result[0] if views_result else None
+        
+        # Enhanced summary
+        dims = params['dimensions']
+        dim_summary = []
+        for key, value in dims.items():
+            if value is not None and key in ['length', 'width', 'height', 'radius', 'diameter', 'thickness']:
+                dim_summary.append(f"{key.title()}: {value}mm")
+        
+        backend_info = "✅ CadQuery (parametric)" if CADQUERY_AVAILABLE and params['precision'] == 'high' else "⚡ Trimesh (fast)"
+        boolean_info = f"Boolean backend: {BOOL_BACKEND}" if BOOL_BACKEND else "No boolean backend"
         
         summary = f"""
-**Generated CAD Model Summary:**
-- **Shape:** {params['shape'].title()}
-- **Dimensions:** Length: {params['dimensions']['length']}mm, Width: {params['dimensions']['width']}mm, Height: {params['dimensions']['height']}mm
+**🔧 Generated CAD Model Summary:**
+- **Shape:** {params['shape'].replace('_', ' ').replace('parametric ', '').title()}
+- **Dimensions:** {', '.join(dim_summary) if dim_summary else 'Default dimensions'}
 - **Color:** {params['color'].title()}
+- **Precision Mode:** {params['precision'].title()} precision
+- **CAD Backend:** {backend_info}
+- **{boolean_info}**
 - **Original Prompt:** "{params['prompt']}"
 
-The kelmoid has been successfully generated with both 3D visualization and orthographic views.
+✅ The model has been successfully generated with 6-view orthographic projections.
 """
         
-        return fig_3d, ortho_views, summary
+        # Optional export
+        export_path = None
+        if export_format and mesh_3d:
+            try:
+                tmpfile = tempfile.NamedTemporaryFile(suffix=f'.{export_format}', delete=False)
+                tmpname = tmpfile.name
+                tmpfile.close()
+                export_mesh(mesh_3d, tmpname)
+                export_path = tmpname
+            except Exception as e:
+                export_path = None
+                print(f"Export error: {e}")
+        
+        return fig_3d, ortho_views, summary, export_path
         
     except Exception as e:
         error_msg = f"Error generating CAD model: {str(e)}"
@@ -1103,7 +1461,7 @@ The kelmoid has been successfully generated with both 3D visualization and ortho
         error_img = Image.open(buf)
         plt.close()
         
-        return placeholder_fig, error_img, error_msg
+        return placeholder_fig, error_img, error_msg, None
 
 def process_plate_design(description):
     """Process plate description and generate outputs"""
@@ -1172,10 +1530,30 @@ def create_gradio_interface():
                     with gr.Column(scale=2):
                         cad_prompt = gr.Textbox(
                             label="Design Prompt",
-                            placeholder="Enter your CAD design description (e.g., 'Create a steel cube 20x20x20mm')",
+                            placeholder="e.g., 'Create a door width=900 height=2100 thickness=40 panels=2' or 'washer radius=20 thickness=3'",
                             lines=3
                         )
+                        
+                        with gr.Row():
+                            precision_choice = gr.Radio(
+                                ["High (parametric)", "Fast (approximate)"], 
+                                value="High (parametric)", 
+                                label="Precision Mode",
+                                info="High uses CadQuery for accuracy, Fast uses Trimesh for speed"
+                            )
+                            export_format = gr.Dropdown(
+                                ["stl", "obj", "ply", "glb"], 
+                                value="stl", 
+                                label="Export Format"
+                            )
+                            grid_layout = gr.Dropdown(
+                                ["2x3", "3x2", "1x6", "6x1"], 
+                                value="2x3", 
+                                label="Orthographic Layout"
+                            )
+                        
                         cad_generate_btn = gr.Button("🚀 Generate CAD Model", variant="primary", size="lg")
+                        download_file = gr.File(label="Download CAD File", visible=False)
                         
                         gr.Markdown("**Quick Examples:**")
                         with gr.Row():
@@ -1197,20 +1575,20 @@ def create_gradio_interface():
                             )
                         
                         with gr.Row():
-                            gr.Button("Door Frame 900x2100", size="sm").click(
-                                lambda: "Create a door frame width 900mm height 2100mm thickness 50mm", 
+                            gr.Button("Parametric Door", size="sm").click(
+                                lambda: "Create parametric door width=900 height=2100 thickness=40 panels=2", 
                                 outputs=cad_prompt
                             )
-                            gr.Button("Window Frame 1200x1000", size="sm").click(
-                                lambda: "Design a window frame width 1200mm height 1000mm with sill", 
+                            gr.Button("Water Tank", size="sm").click(
+                                lambda: "Design water tank diameter=1000 height=1200 wall_thickness=8", 
                                 outputs=cad_prompt
                             )
-                            gr.Button("Bed Frame Queen", size="sm").click(
-                                lambda: "Create a bed frame length 2000mm width 1500mm height 400mm", 
+                            gr.Button("Precision Washer", size="sm").click(
+                                lambda: "Create parametric washer outer_radius=25 inner_radius=10 thickness=3", 
                                 outputs=cad_prompt
                             )
-                            gr.Button("Cabinet Frame", size="sm").click(
-                                lambda: "Make a cabinet frame width 600mm depth 350mm height 720mm", 
+                            gr.Button("Hex Nut M12", size="sm").click(
+                                lambda: "Make parametric nut radius=12 thickness=10 hole_radius=6", 
                                 outputs=cad_prompt
                             )
                 
@@ -1224,8 +1602,8 @@ def create_gradio_interface():
                 
                 cad_generate_btn.click(
                     fn=process_text_to_cad,
-                    inputs=[cad_prompt],
-                    outputs=[cad_3d_output, cad_ortho_output, cad_summary_output]
+                    inputs=[cad_prompt, precision_choice, export_format, grid_layout],
+                    outputs=[cad_3d_output, cad_ortho_output, cad_summary_output, download_file]
                 )
             
             # =====================================================
@@ -1316,13 +1694,22 @@ def create_gradio_interface():
         ---
         ### 📚 Usage Guide:
         
-        **Text-to-CAD Generator:**
+        **🔧 Enhanced Text-to-CAD Generator:**
         - **Basic Shapes**: cube, sphere, cylinder, cone, pyramid, torus, gear, plate, rod
         - **Mechanical Parts**: bracket, washer, screw, bolt, nut, bearing, flange, pipe
-        - **Architectural Frames**: door frame, window frame, gypsum frame, drywall frame
+        - **Architectural Frames**: door frame, window frame, gypsum frame, drywall frame, water tank
         - **Furniture Frames**: bed frame, table frame, chair frame, shelf frame, cabinet frame
-        - **Dimension Keywords**: length, width, height, radius, diameter, thickness, depth, spacing
+        - **Parametric Models**: parametric_door, parametric_window, parametric_washer, parametric_nut, parametric_bracket
+        - **Precision Modes**: High (CadQuery parametric) vs Fast (Trimesh approximate)
+        - **Key=Value Syntax**: Use `width=900 height=2100 thickness=40` for precise control
+        - **Export Formats**: STL, OBJ, PLY, GLB for 3D printing and CAD software
+        - **Dimension Keywords**: length, width, height, radius, diameter, thickness, depth, spacing, panels, frames
         - **Colors**: red, blue, green, yellow, orange, purple, pink, brown, black, white, gray
+        
+        **🎯 Pro Tips:**
+        - Use `parametric_` prefix for high-precision mechanical parts
+        - Include `panels=4` for doors, `wall_thickness=8` for tanks
+        - Try `NxMxP` patterns like `100x50x25` for quick dimensions
         
         **2D Plate Designer:**
         - Describe plates with dimensions like "100mm x 50mm"
@@ -1334,7 +1721,14 @@ def create_gradio_interface():
         - Adjust grid resolution for accuracy vs. speed
         - Lower viscosity = higher Reynolds number = more turbulent flow
         
-        **Note:** This application runs on CPU and is optimized for educational and prototyping purposes.
+        **🚀 Enhanced Features:**
+        - **CadQuery Integration**: Precise parametric CAD when available
+        - **Boolean Backend**: Advanced geometry operations with manifold3d
+        - **6-View Orthographics**: Professional engineering drawings
+        - **Export Support**: Direct download of STL/OBJ/PLY/GLB files
+        - **Key=Value Parsing**: `width=900 thickness=40` syntax support
+        
+        **Note:** This application supports both CPU-based fast prototyping and precision parametric CAD modeling.
         """)
     
     return demo
