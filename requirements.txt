@@ -1,0 +1,14 @@
+gradio
+pyvista
+matplotlib
+numpy
+ipython
+pillow
+shapely
+trimesh
+plotly
+cadquery-ocp
+opencv-python
+scipy
+requests
+beautifulsoup4
