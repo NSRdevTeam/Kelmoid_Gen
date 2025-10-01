@@ -22,6 +22,7 @@ class TextToCADGenerator:
     """Enhanced Text-to-CAD generator with all shapes"""
     def __init__(self):
         self.shapes_library = {
+            # Basic shapes
             'cube': self._create_cube,
             'box': self._create_cube,
             'sphere': self._create_sphere,
@@ -32,6 +33,7 @@ class TextToCADGenerator:
             'pyramid': self._create_pyramid,
             'torus': self._create_torus,
             'ring': self._create_torus,
+            # Mechanical parts
             'gear': self._create_gear,
             'bracket': self._create_bracket,
             'plate': self._create_plate,
@@ -42,7 +44,26 @@ class TextToCADGenerator:
             'nut': self._create_nut,
             'bearing': self._create_bearing,
             'flange': self._create_flange,
-            'pipe': self._create_pipe
+            'pipe': self._create_pipe,
+            # Architectural frames
+            'doorframe': self._create_door_frame,
+            'door_frame': self._create_door_frame,
+            'windowframe': self._create_window_frame,
+            'window_frame': self._create_window_frame,
+            'gypsumframe': self._create_gypsum_frame,
+            'gypsum_frame': self._create_gypsum_frame,
+            'drywall_frame': self._create_gypsum_frame,
+            # Furniture frames
+            'bedframe': self._create_bed_frame,
+            'bed_frame': self._create_bed_frame,
+            'tableframe': self._create_table_frame,
+            'table_frame': self._create_table_frame,
+            'chairframe': self._create_chair_frame,
+            'chair_frame': self._create_chair_frame,
+            'shelfframe': self._create_shelf_frame,
+            'shelf_frame': self._create_shelf_frame,
+            'cabinetframe': self._create_cabinet_frame,
+            'cabinet_frame': self._create_cabinet_frame
         }
 
     def parse_prompt(self, prompt: str):
@@ -70,7 +91,11 @@ class TextToCADGenerator:
 
     def _extract_dimensions(self, prompt: str):
         """Extract dimensions from prompt"""
-        dimensions = {'length': 10, 'width': 10, 'height': 10, 'radius': 5, 'diameter': 10}
+        dimensions = {
+            'length': 10, 'width': 10, 'height': 10, 'radius': 5, 'diameter': 10,
+            'depth': 10, 'thickness': 5, 'spacing': 400, 'num_shelves': 4,
+            'rail_width': 80, 'leg_size': 50, 'panel_thickness': 18
+        }
         
         patterns = {
             'length': r'length\s*[:=]?\s*(\d+\.?\d*)',
@@ -78,8 +103,14 @@ class TextToCADGenerator:
             'height': r'height\s*[:=]?\s*(\d+\.?\d*)',
             'radius': r'radius\s*[:=]?\s*(\d+\.?\d*)',
             'diameter': r'diameter\s*[:=]?\s*(\d+\.?\d*)',
+            'depth': r'depth\s*[:=]?\s*(\d+\.?\d*)',
             'size': r'size\s*[:=]?\s*(\d+\.?\d*)',
-            'thick': r'thick\w*\s*[:=]?\s*(\d+\.?\d*)'
+            'thick': r'thick\w*\s*[:=]?\s*(\d+\.?\d*)',
+            'spacing': r'spacing\s*[:=]?\s*(\d+\.?\d*)',
+            'shelves': r'shelves\s*[:=]?\s*(\d+)',
+            'rail': r'rail\s*[:=]?\s*(\d+\.?\d*)',
+            'leg': r'leg\s*[:=]?\s*(\d+\.?\d*)',
+            'panel': r'panel\s*[:=]?\s*(\d+\.?\d*)'
         }
         
         for key, pattern in patterns.items():
@@ -89,7 +120,15 @@ class TextToCADGenerator:
                 if key == 'size':
                     dimensions['length'] = dimensions['width'] = dimensions['height'] = value
                 elif key == 'thick':
-                    dimensions['height'] = value
+                    dimensions['thickness'] = value
+                elif key == 'shelves':
+                    dimensions['num_shelves'] = int(value)
+                elif key == 'rail':
+                    dimensions['rail_width'] = value
+                elif key == 'leg':
+                    dimensions['leg_size'] = value
+                elif key == 'panel':
+                    dimensions['panel_thickness'] = value
                 else:
                     dimensions[key] = value
         
@@ -253,6 +292,301 @@ class TextToCADGenerator:
         except Exception:
             # Fallback: return solid cylinder without hole
             return trimesh.creation.cylinder(radius=outer_radius, height=length)
+
+    # =====================================================
+    # ARCHITECTURAL FRAMES
+    # =====================================================
+    
+    def _create_door_frame(self, dims):
+        """Create a door frame with header and side jambs"""
+        width = dims.get('width', 900)  # Door opening width (mm)
+        height = dims.get('height', 2100)  # Door opening height (mm)
+        depth = dims.get('depth', 150)  # Frame depth (mm)
+        thickness = dims.get('thickness', 50)  # Frame thickness (mm)
+        
+        try:
+            # Create the outer frame box
+            outer_width = width + 2 * thickness
+            outer_height = height + thickness  # No bottom piece
+            frame_box = trimesh.creation.box(extents=[outer_width, depth, outer_height])
+            
+            # Create the opening to subtract
+            opening = trimesh.creation.box(extents=[width, depth * 1.1, height])
+            opening = opening.apply_translation([0, 0, -thickness/2])
+            
+            return frame_box.difference(opening)
+        except Exception:
+            # Fallback: create L-shaped frame pieces
+            # Left jamb
+            left = trimesh.creation.box(extents=[thickness, depth, height])
+            left = left.apply_translation([-(width/2 + thickness/2), 0, 0])
+            # Right jamb  
+            right = trimesh.creation.box(extents=[thickness, depth, height])
+            right = right.apply_translation([(width/2 + thickness/2), 0, 0])
+            # Header
+            header = trimesh.creation.box(extents=[width + 2*thickness, depth, thickness])
+            header = header.apply_translation([0, 0, height/2 + thickness/2])
+            
+            try:
+                return left.union(right).union(header)
+            except Exception:
+                return trimesh.creation.box(extents=[outer_width, depth, outer_height])
+    
+    def _create_window_frame(self, dims):
+        """Create a window frame with sill"""
+        width = dims.get('width', 1200)  # Window opening width (mm)
+        height = dims.get('height', 1000)  # Window opening height (mm)
+        depth = dims.get('depth', 100)  # Frame depth (mm)
+        thickness = dims.get('thickness', 50)  # Frame thickness (mm)
+        sill_height = dims.get('sill_height', 20)  # Window sill height (mm)
+        
+        try:
+            # Create the outer frame box
+            outer_width = width + 2 * thickness
+            outer_height = height + 2 * thickness
+            frame_box = trimesh.creation.box(extents=[outer_width, depth, outer_height])
+            
+            # Create the opening to subtract
+            opening = trimesh.creation.box(extents=[width, depth * 1.1, height])
+            
+            # Create window sill (extended bottom piece)
+            sill = trimesh.creation.box(extents=[outer_width + 100, depth + 50, sill_height])
+            sill = sill.apply_translation([0, 25, -(outer_height/2 + sill_height/2)])
+            
+            frame_with_opening = frame_box.difference(opening)
+            return frame_with_opening.union(sill)
+            
+        except Exception:
+            # Fallback: create frame pieces separately
+            # Create 4 sides of the window frame
+            left = trimesh.creation.box(extents=[thickness, depth, height + 2*thickness])
+            left = left.apply_translation([-(width/2 + thickness/2), 0, 0])
+            right = trimesh.creation.box(extents=[thickness, depth, height + 2*thickness])
+            right = right.apply_translation([(width/2 + thickness/2), 0, 0])
+            top = trimesh.creation.box(extents=[width, depth, thickness])
+            top = top.apply_translation([0, 0, height/2 + thickness/2])
+            bottom = trimesh.creation.box(extents=[width, depth, thickness])
+            bottom = bottom.apply_translation([0, 0, -(height/2 + thickness/2)])
+            
+            try:
+                return left.union(right).union(top).union(bottom)
+            except Exception:
+                return trimesh.creation.box(extents=[outer_width, depth, outer_height])
+    
+    def _create_gypsum_frame(self, dims):
+        """Create a gypsum/drywall frame structure"""
+        width = dims.get('width', 2400)  # Frame width (mm)
+        height = dims.get('height', 2700)  # Frame height (mm)
+        depth = dims.get('depth', 100)  # Stud depth (mm)
+        stud_width = dims.get('stud_width', 50)  # Stud width (mm)
+        spacing = dims.get('spacing', 400)  # Stud spacing (mm)
+        
+        try:
+            # Create top and bottom plates
+            top_plate = trimesh.creation.box(extents=[width, depth, stud_width])
+            top_plate = top_plate.apply_translation([0, 0, height/2 - stud_width/2])
+            bottom_plate = trimesh.creation.box(extents=[width, depth, stud_width])
+            bottom_plate = bottom_plate.apply_translation([0, 0, -height/2 + stud_width/2])
+            
+            # Create vertical studs
+            stud_height = height - 2 * stud_width
+            num_studs = int(width / spacing) + 1
+            studs = []
+            
+            for i in range(num_studs):
+                x_pos = -width/2 + i * spacing
+                if x_pos <= width/2:
+                    stud = trimesh.creation.box(extents=[stud_width, depth, stud_height])
+                    stud = stud.apply_translation([x_pos, 0, 0])
+                    studs.append(stud)
+            
+            # Combine all pieces
+            frame = top_plate.union(bottom_plate)
+            for stud in studs:
+                frame = frame.union(stud)
+            
+            return frame
+            
+        except Exception:
+            # Fallback: simple rectangular frame
+            return trimesh.creation.box(extents=[width, depth, height])
+
+    # =====================================================
+    # FURNITURE FRAMES
+    # =====================================================
+    
+    def _create_bed_frame(self, dims):
+        """Create a bed frame structure"""
+        length = dims.get('length', 2000)  # Bed length (mm)
+        width = dims.get('width', 1500)   # Bed width (mm)
+        height = dims.get('height', 400)  # Frame height (mm)
+        rail_width = dims.get('rail_width', 80)  # Rail thickness (mm)
+        rail_height = dims.get('rail_height', 200)  # Rail height (mm)
+        
+        try:
+            # Create head rail
+            head_rail = trimesh.creation.box(extents=[width, rail_width, rail_height])
+            head_rail = head_rail.apply_translation([0, length/2 - rail_width/2, rail_height/2 - height/2])
+            
+            # Create foot rail
+            foot_rail = trimesh.creation.box(extents=[width, rail_width, rail_height * 0.6])
+            foot_rail = foot_rail.apply_translation([0, -length/2 + rail_width/2, rail_height*0.3 - height/2])
+            
+            # Create side rails
+            left_rail = trimesh.creation.box(extents=[rail_width, length - 2*rail_width, rail_width])
+            left_rail = left_rail.apply_translation([-width/2 + rail_width/2, 0, -height/2 + rail_width/2])
+            
+            right_rail = trimesh.creation.box(extents=[rail_width, length - 2*rail_width, rail_width])
+            right_rail = right_rail.apply_translation([width/2 - rail_width/2, 0, -height/2 + rail_width/2])
+            
+            # Create support slats (simplified as a platform)
+            platform = trimesh.creation.box(extents=[width - 2*rail_width, length - 2*rail_width, 20])
+            platform = platform.apply_translation([0, 0, -height/2 + 20])
+            
+            return head_rail.union(foot_rail).union(left_rail).union(right_rail).union(platform)
+            
+        except Exception:
+            # Fallback: simple platform
+            return trimesh.creation.box(extents=[width, length, height])
+    
+    def _create_table_frame(self, dims):
+        """Create a table frame structure"""
+        length = dims.get('length', 1200)  # Table length (mm)
+        width = dims.get('width', 800)    # Table width (mm)
+        height = dims.get('height', 750)  # Table height (mm)
+        top_thickness = dims.get('top_thickness', 30)  # Top thickness (mm)
+        leg_size = dims.get('leg_size', 50)  # Leg cross-section (mm)
+        
+        try:
+            # Create table top
+            table_top = trimesh.creation.box(extents=[length, width, top_thickness])
+            table_top = table_top.apply_translation([0, 0, height/2 - top_thickness/2])
+            
+            # Create legs
+            leg_height = height - top_thickness
+            leg_positions = [
+                [-length/2 + leg_size, -width/2 + leg_size, -top_thickness/2],
+                [length/2 - leg_size, -width/2 + leg_size, -top_thickness/2],
+                [-length/2 + leg_size, width/2 - leg_size, -top_thickness/2],
+                [length/2 - leg_size, width/2 - leg_size, -top_thickness/2]
+            ]
+            
+            frame = table_top
+            for pos in leg_positions:
+                leg = trimesh.creation.box(extents=[leg_size, leg_size, leg_height])
+                leg = leg.apply_translation(pos)
+                frame = frame.union(leg)
+            
+            return frame
+            
+        except Exception:
+            # Fallback: solid block
+            return trimesh.creation.box(extents=[length, width, height])
+    
+    def _create_chair_frame(self, dims):
+        """Create a chair frame structure"""
+        width = dims.get('width', 450)     # Seat width (mm)
+        depth = dims.get('depth', 400)     # Seat depth (mm)
+        seat_height = dims.get('seat_height', 450)  # Seat height (mm)
+        back_height = dims.get('back_height', 350)  # Back height above seat (mm)
+        frame_size = dims.get('frame_size', 30)     # Frame member size (mm)
+        
+        try:
+            # Create seat frame
+            seat = trimesh.creation.box(extents=[width, depth, frame_size])
+            seat = seat.apply_translation([0, 0, seat_height - frame_size/2])
+            
+            # Create backrest
+            back = trimesh.creation.box(extents=[width, frame_size, back_height])
+            back = back.apply_translation([0, depth/2 - frame_size/2, seat_height + back_height/2])
+            
+            # Create legs
+            leg_positions = [
+                [-width/2 + frame_size/2, -depth/2 + frame_size/2],
+                [width/2 - frame_size/2, -depth/2 + frame_size/2],
+                [-width/2 + frame_size/2, depth/2 - frame_size/2],
+                [width/2 - frame_size/2, depth/2 - frame_size/2]
+            ]
+            
+            frame = seat.union(back)
+            for x, y in leg_positions:
+                leg = trimesh.creation.box(extents=[frame_size, frame_size, seat_height])
+                leg = leg.apply_translation([x, y, seat_height/2 - frame_size/2])
+                frame = frame.union(leg)
+            
+            return frame
+            
+        except Exception:
+            # Fallback: simple chair block
+            total_height = seat_height + back_height
+            return trimesh.creation.box(extents=[width, depth, total_height])
+    
+    def _create_shelf_frame(self, dims):
+        """Create a shelf frame structure"""
+        width = dims.get('width', 800)     # Shelf width (mm)
+        depth = dims.get('depth', 300)     # Shelf depth (mm)
+        height = dims.get('height', 1800)  # Total height (mm)
+        shelf_thickness = dims.get('shelf_thickness', 20)  # Shelf thickness (mm)
+        num_shelves = dims.get('num_shelves', 4)  # Number of shelves
+        
+        try:
+            # Create vertical sides
+            left_side = trimesh.creation.box(extents=[shelf_thickness, depth, height])
+            left_side = left_side.apply_translation([-width/2 + shelf_thickness/2, 0, 0])
+            
+            right_side = trimesh.creation.box(extents=[shelf_thickness, depth, height])
+            right_side = right_side.apply_translation([width/2 - shelf_thickness/2, 0, 0])
+            
+            # Create shelves
+            shelf_spacing = (height - shelf_thickness) / (num_shelves - 1)
+            frame = left_side.union(right_side)
+            
+            for i in range(num_shelves):
+                z_pos = -height/2 + shelf_thickness/2 + i * shelf_spacing
+                shelf = trimesh.creation.box(extents=[width - 2*shelf_thickness, depth, shelf_thickness])
+                shelf = shelf.apply_translation([0, 0, z_pos])
+                frame = frame.union(shelf)
+            
+            return frame
+            
+        except Exception:
+            # Fallback: solid block
+            return trimesh.creation.box(extents=[width, depth, height])
+    
+    def _create_cabinet_frame(self, dims):
+        """Create a cabinet frame structure"""
+        width = dims.get('width', 600)     # Cabinet width (mm)
+        depth = dims.get('depth', 350)     # Cabinet depth (mm)
+        height = dims.get('height', 720)   # Cabinet height (mm)
+        panel_thickness = dims.get('panel_thickness', 18)  # Panel thickness (mm)
+        
+        try:
+            # Create cabinet box
+            # Left side
+            left = trimesh.creation.box(extents=[panel_thickness, depth, height])
+            left = left.apply_translation([-width/2 + panel_thickness/2, 0, 0])
+            
+            # Right side
+            right = trimesh.creation.box(extents=[panel_thickness, depth, height])
+            right = right.apply_translation([width/2 - panel_thickness/2, 0, 0])
+            
+            # Top
+            top = trimesh.creation.box(extents=[width, depth, panel_thickness])
+            top = top.apply_translation([0, 0, height/2 - panel_thickness/2])
+            
+            # Bottom
+            bottom = trimesh.creation.box(extents=[width, depth, panel_thickness])
+            bottom = bottom.apply_translation([0, 0, -height/2 + panel_thickness/2])
+            
+            # Back panel
+            back_panel = trimesh.creation.box(extents=[width - 2*panel_thickness, panel_thickness, height - 2*panel_thickness])
+            back_panel = back_panel.apply_translation([0, depth/2 - panel_thickness/2, 0])
+            
+            return left.union(right).union(top).union(bottom).union(back_panel)
+            
+        except Exception:
+            # Fallback: solid block
+            return trimesh.creation.box(extents=[width, depth, height])
 
     def generate_3d_model(self, params):
         """Generate 3D model based on parameters"""
@@ -861,6 +1195,24 @@ def create_gradio_interface():
                                 lambda: "Create an L-shaped bracket 30x20x15mm", 
                                 outputs=cad_prompt
                             )
+                        
+                        with gr.Row():
+                            gr.Button("Door Frame 900x2100", size="sm").click(
+                                lambda: "Create a door frame width 900mm height 2100mm thickness 50mm", 
+                                outputs=cad_prompt
+                            )
+                            gr.Button("Window Frame 1200x1000", size="sm").click(
+                                lambda: "Design a window frame width 1200mm height 1000mm with sill", 
+                                outputs=cad_prompt
+                            )
+                            gr.Button("Bed Frame Queen", size="sm").click(
+                                lambda: "Create a bed frame length 2000mm width 1500mm height 400mm", 
+                                outputs=cad_prompt
+                            )
+                            gr.Button("Cabinet Frame", size="sm").click(
+                                lambda: "Make a cabinet frame width 600mm depth 350mm height 720mm", 
+                                outputs=cad_prompt
+                            )
                 
                 with gr.Row():
                     with gr.Column():
@@ -965,9 +1317,12 @@ def create_gradio_interface():
         ### 📚 Usage Guide:
         
         **Text-to-CAD Generator:**
-        - Supports shapes: cube, sphere, cylinder, cone, gear, bracket, plate, rod, washer, screw, nut, bearing, flange, pipe
-        - Use dimension keywords: length, width, height, radius, diameter, thickness
-        - Specify colors: red, blue, green, yellow, orange, purple, pink, brown, black, white, gray
+        - **Basic Shapes**: cube, sphere, cylinder, cone, pyramid, torus, gear, plate, rod
+        - **Mechanical Parts**: bracket, washer, screw, bolt, nut, bearing, flange, pipe
+        - **Architectural Frames**: door frame, window frame, gypsum frame, drywall frame
+        - **Furniture Frames**: bed frame, table frame, chair frame, shelf frame, cabinet frame
+        - **Dimension Keywords**: length, width, height, radius, diameter, thickness, depth, spacing
+        - **Colors**: red, blue, green, yellow, orange, purple, pink, brown, black, white, gray
         
         **2D Plate Designer:**
         - Describe plates with dimensions like "100mm x 50mm"
