@@ -182,9 +182,13 @@ class TextToCADGenerator:
         outer_radius = dims.get('radius', 10)
         inner_radius = outer_radius * 0.4
         height = dims.get('height', 2)
-        outer = trimesh.creation.cylinder(radius=outer_radius, height=height)
-        inner = trimesh.creation.cylinder(radius=inner_radius, height=height * 1.1)
-        return outer.difference(inner)
+        try:
+            outer = trimesh.creation.cylinder(radius=outer_radius, height=height)
+            inner = trimesh.creation.cylinder(radius=inner_radius, height=height * 1.1)
+            return outer.difference(inner)
+        except Exception:
+            # Fallback: return outer cylinder if boolean operation fails
+            return trimesh.creation.cylinder(radius=outer_radius, height=height)
 
     def _create_screw(self, dims):
         radius = dims.get('radius', 3)
@@ -192,43 +196,63 @@ class TextToCADGenerator:
         head_radius = radius * 1.5
         head_height = radius
         
-        body = trimesh.creation.cylinder(radius=radius, height=length)
-        head = trimesh.creation.cylinder(radius=head_radius, height=head_height)
-        head = head.apply_translation([0, 0, length/2 + head_height/2])
-        return body.union(head)
+        try:
+            body = trimesh.creation.cylinder(radius=radius, height=length)
+            head = trimesh.creation.cylinder(radius=head_radius, height=head_height)
+            head = head.apply_translation([0, 0, length/2 + head_height/2])
+            return body.union(head)
+        except Exception:
+            # Fallback: return just the body cylinder if union fails
+            return trimesh.creation.cylinder(radius=radius, height=length)
 
     def _create_nut(self, dims):
         radius = dims.get('radius', 5)
         height = dims.get('height', 4)
         inner_radius = radius * 0.4
         
-        outer = trimesh.creation.cylinder(radius=radius, height=height, sections=6)
-        inner = trimesh.creation.cylinder(radius=inner_radius, height=height * 1.1)
-        return outer.difference(inner)
+        try:
+            outer = trimesh.creation.cylinder(radius=radius, height=height, sections=6)
+            inner = trimesh.creation.cylinder(radius=inner_radius, height=height * 1.1)
+            return outer.difference(inner)
+        except Exception:
+            # Fallback: return hexagonal cylinder without hole
+            return trimesh.creation.cylinder(radius=radius, height=height, sections=6)
 
     def _create_bearing(self, dims):
         outer_radius = dims.get('radius', 10)
         inner_radius = outer_radius * 0.6
         height = dims.get('height', 5)
-        outer = trimesh.creation.cylinder(radius=outer_radius, height=height)
-        inner = trimesh.creation.cylinder(radius=inner_radius, height=height * 1.1)
-        return outer.difference(inner)
+        try:
+            outer = trimesh.creation.cylinder(radius=outer_radius, height=height)
+            inner = trimesh.creation.cylinder(radius=inner_radius, height=height * 1.1)
+            return outer.difference(inner)
+        except Exception:
+            # Fallback: return outer cylinder without hole
+            return trimesh.creation.cylinder(radius=outer_radius, height=height)
 
     def _create_flange(self, dims):
         outer_radius = dims.get('radius', 15)
         inner_radius = outer_radius * 0.4
         height = dims.get('height', 5)
-        outer = trimesh.creation.cylinder(radius=outer_radius, height=height)
-        inner = trimesh.creation.cylinder(radius=inner_radius, height=height * 1.1)
-        return outer.difference(inner)
+        try:
+            outer = trimesh.creation.cylinder(radius=outer_radius, height=height)
+            inner = trimesh.creation.cylinder(radius=inner_radius, height=height * 1.1)
+            return outer.difference(inner)
+        except Exception:
+            # Fallback: return outer cylinder without hole
+            return trimesh.creation.cylinder(radius=outer_radius, height=height)
 
     def _create_pipe(self, dims):
         outer_radius = dims.get('radius', 10)
         inner_radius = outer_radius * 0.8
         length = dims.get('length', 30)
-        outer = trimesh.creation.cylinder(radius=outer_radius, height=length)
-        inner = trimesh.creation.cylinder(radius=inner_radius, height=length * 1.1)
-        return outer.difference(inner)
+        try:
+            outer = trimesh.creation.cylinder(radius=outer_radius, height=length)
+            inner = trimesh.creation.cylinder(radius=inner_radius, height=length * 1.1)
+            return outer.difference(inner)
+        except Exception:
+            # Fallback: return solid cylinder without hole
+            return trimesh.creation.cylinder(radius=outer_radius, height=length)
 
     def generate_3d_model(self, params):
         """Generate 3D model based on parameters"""
