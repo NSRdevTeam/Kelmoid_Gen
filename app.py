@@ -6,6 +6,7 @@ import plotly.graph_objects as go
 import trimesh
 from shapely.geometry import box, Point
 from shapely.affinity import scale
+from scipy.spatial import ConvexHull
 import re
 import io
 import base64
@@ -593,62 +594,96 @@ def run_cfd_simulation(Lx=2.0, Ly=1.0, Nx=41, Ny=21, inlet_velocity=0.005,
         return img, f"Error: {str(e)}"
 
 # =====================================================
-# ORTHOGRAPHIC VIEWS GENERATOR
+# ORTHOGRAPHIC VIEWS GENERATOR (6 views + flexible grid)
 # =====================================================
 
-def generate_orthographic_views(mesh):
-    """Generate orthographic views from 3D mesh"""
+def generate_orthographic_views(mesh, layout="2x3"):
+    """
+    Generate 6 orthographic views (Front, Back, Top, Bottom, Left, Right)
+    and a combined grid image with customizable layout.
+
+    Args:
+        mesh: 3D mesh with `.vertices`
+        layout (str): Grid layout e.g. "2x3", "3x2", "1x6", "6x1"
+    
+    Returns:
+        PIL Image: Combined orthographic views
+    """
     try:
-        bounds = mesh.bounds
-        x_min, x_max, y_min, y_max, z_min, z_max = bounds
-        x_dim = x_max - x_min
-        y_dim = y_max - y_min
-        z_dim = z_max - z_min
+        projections = [
+            ("Front (XY)",  [0, 1]),
+            ("Back (XY)",   [0, 1]),
+            ("Top (XZ)",    [0, 2]),
+            ("Bottom (XZ)", [0, 2]),
+            ("Left (YZ)",   [1, 2]),
+            ("Right (YZ)",  [1, 2]),
+        ]
         
-        fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-        view_titles = ["Front View (XY)", "Top View (XZ)", "Side View (YZ)"]
-        dims = [(x_dim, y_dim), (x_dim, z_dim), (y_dim, z_dim)]
-        
-        for i, (ax, title, (dim1, dim2)) in enumerate(zip(axes, view_titles, dims)):
+        views = []
+        titles = []
+
+        # --- Generate individual images ---
+        for title, axes_idx in projections:
+            fig, ax = plt.subplots(figsize=(4, 4))
             ax.set_title(title)
             ax.set_aspect('equal')
             ax.grid(True, alpha=0.3)
-            
-            # Draw a simple rectangular outline (simplified orthographic projection)
-            if i == 0:  # Front view
-                vertices_2d = mesh.vertices[:, [0, 1]]  # XY projection
-            elif i == 1:  # Top view
-                vertices_2d = mesh.vertices[:, [0, 2]]  # XZ projection
-            else:  # Side view
-                vertices_2d = mesh.vertices[:, [1, 2]]  # YZ projection
-            
-            # Simple boundary outline
-            from scipy.spatial import ConvexHull
+
+            vertices_2d = mesh.vertices[:, axes_idx]
+
             if len(vertices_2d) > 3:
-                hull = ConvexHull(vertices_2d)
-                hull_points = vertices_2d[hull.vertices]
-                hull_points = np.vstack([hull_points, hull_points[0]])  # Close the polygon
-                ax.plot(hull_points[:, 0], hull_points[:, 1], 'b-', linewidth=2)
-            
-            # Add dimensions
-            ax.text(0.5, 0.95, f"Dim1: {dim1:.1f} mm", transform=ax.transAxes, ha='center')
-            ax.text(0.05, 0.5, f"Dim2: {dim2:.1f} mm", transform=ax.transAxes, va='center', rotation=90)
-        
+                try:
+                    hull = ConvexHull(vertices_2d)
+                    hull_points = vertices_2d[hull.vertices]
+                    hull_points = np.vstack([hull_points, hull_points[0]])
+                    ax.plot(hull_points[:, 0], hull_points[:, 1], 'b-', linewidth=2)
+                except Exception as hull_err:
+                    print(f"Hull error on {title}: {hull_err}")
+
+            buf = io.BytesIO()
+            plt.savefig(buf, format='png', dpi=120, bbox_inches='tight')
+            buf.seek(0)
+            img = Image.open(buf)
+            plt.close(fig)
+
+            views.append(img)
+            titles.append(title)
+
+        # --- Parse layout ---
+        try:
+            rows, cols = map(int, layout.lower().split("x"))
+            if rows * cols < 6:
+                raise ValueError("Layout grid too small for 6 views.")
+        except Exception:
+            print(f"Invalid layout '{layout}', defaulting to 2x3")
+            rows, cols = 2, 3
+
+        # --- Create combined grid ---
+        fig, axs = plt.subplots(rows, cols, figsize=(4*cols, 4*rows))
+        axs = np.array(axs).reshape(-1)  # Flatten to 1D array for easy indexing
+
+        for ax, view_img, title in zip(axs, views, titles):
+            ax.imshow(view_img)
+            ax.set_title(title, fontsize=10)
+            ax.axis("off")
+
+        # Hide extra empty subplots if grid > 6
+        for ax in axs[len(views):]:
+            ax.axis("off")
+
         plt.tight_layout()
-        
-        # Convert to image
         buf = io.BytesIO()
         plt.savefig(buf, format='png', dpi=150, bbox_inches='tight')
         buf.seek(0)
-        img = Image.open(buf)
-        plt.close()
-        
-        return img
-        
+        combined_img = Image.open(buf)
+        plt.close(fig)
+
+        return combined_img
+    
     except Exception as e:
         # Return error image
         fig, ax = plt.subplots(figsize=(10, 6))
-        ax.text(0.5, 0.5, f"Orthographic Views Error: {str(e)}", ha='center', va='center', fontsize=12)
+        ax.text(0.5, 0.5, f"Orthographic Views Error: {str(e)}", ha='center', va='center', fontsize=12, color='red')
         ax.set_xlim(0, 1)
         ax.set_ylim(0, 1)
         plt.title("Orthographic Views Error")
