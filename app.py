@@ -1266,15 +1266,24 @@ def run_cfd_simulation(Lx=2.0, Ly=1.0, Nx=41, Ny=21, inlet_velocity=0.005,
 def generate_orthographic_views(mesh, layout="2x3"):
     """
     Generate 6 orthographic views (Front, Back, Top, Bottom, Left, Right)
-    and a combined grid image with customizable layout.
+    and return a combined grid image.
 
     Args:
-        mesh: 3D mesh with `.vertices`
+        mesh: Trimesh.Trimesh object with `.vertices`
         layout (str): Grid layout e.g. "2x3", "3x2", "1x6", "6x1"
     
     Returns:
-        PIL Image: Combined orthographic views
+        PIL.Image: Combined orthographic views
+    
+    Raises:
+        RuntimeError: If mesh processing fails
     """
+    # Validate mesh before processing
+    try:
+        validate_mesh(mesh)
+    except Exception as validation_error:
+        raise RuntimeError(f"Invalid mesh for orthographic views: {validation_error}")
+    
     try:
         projections = [
             ("Front (XY)",  [0, 1]),
@@ -1288,10 +1297,10 @@ def generate_orthographic_views(mesh, layout="2x3"):
         views = []
         titles = []
 
-        # --- Generate individual images ---
+        # Generate individual view images
         for title, axes_idx in projections:
             fig, ax = plt.subplots(figsize=(4, 4))
-            ax.set_title(title)
+            ax.set_title(title, fontsize=12, fontweight='bold')
             ax.set_aspect('equal')
             ax.grid(True, alpha=0.3)
 
@@ -1302,38 +1311,51 @@ def generate_orthographic_views(mesh, layout="2x3"):
                     hull = ConvexHull(vertices_2d)
                     hull_points = vertices_2d[hull.vertices]
                     hull_points = np.vstack([hull_points, hull_points[0]])
-                    ax.plot(hull_points[:, 0], hull_points[:, 1], 'b-', linewidth=2)
-                except Exception as hull_err:
-                    print(f"Hull error on {title}: {hull_err}")
+                    ax.plot(hull_points[:, 0], hull_points[:, 1], 'b-', linewidth=2.5)
+                    ax.fill(hull_points[:, 0], hull_points[:, 1], 'lightblue', alpha=0.3)
+                except Exception:
+                    # Fallback: scatter plot if ConvexHull fails
+                    ax.scatter(vertices_2d[:, 0], vertices_2d[:, 1], c='blue', s=0.5, alpha=0.6)
+            else:
+                ax.scatter(vertices_2d[:, 0], vertices_2d[:, 1], c='blue', s=2)
+
+            # Add dimension annotations
+            if len(vertices_2d) > 0:
+                x_range = np.ptp(vertices_2d[:, 0])
+                y_range = np.ptp(vertices_2d[:, 1])
+                ax.text(0.02, 0.98, f'{x_range:.1f}mm', transform=ax.transAxes, 
+                       verticalalignment='top', fontsize=8, bbox=dict(boxstyle='round,pad=0.3', facecolor='yellow', alpha=0.7))
+                ax.text(0.98, 0.02, f'{y_range:.1f}mm', transform=ax.transAxes, 
+                       horizontalalignment='right', fontsize=8, bbox=dict(boxstyle='round,pad=0.3', facecolor='yellow', alpha=0.7))
 
             buf = io.BytesIO()
             plt.savefig(buf, format='png', dpi=120, bbox_inches='tight')
             buf.seek(0)
-            img = Image.open(buf)
+            img = Image.open(buf).convert('RGBA')
             plt.close(fig)
 
             views.append(img)
             titles.append(title)
 
-        # --- Parse layout ---
+        # Parse layout
         try:
             rows, cols = map(int, layout.lower().split("x"))
             if rows * cols < 6:
-                raise ValueError("Layout grid too small for 6 views.")
+                raise ValueError("Layout grid too small for 6 views")
         except Exception:
-            print(f"Invalid layout '{layout}', defaulting to 2x3")
             rows, cols = 2, 3
 
-        # --- Create combined grid ---
+        # Create combined grid
         fig, axs = plt.subplots(rows, cols, figsize=(4*cols, 4*rows))
-        axs = np.array(axs).reshape(-1)  # Flatten to 1D array for easy indexing
+        fig.suptitle('Engineering Orthographic Views', fontsize=16, fontweight='bold')
+        axs = np.array(axs).reshape(-1)
 
-        for ax, view_img, title in zip(axs, views, titles):
+        for ax, view_img, title in zip(axs[:len(views)], views, titles):
             ax.imshow(view_img)
-            ax.set_title(title, fontsize=10)
+            ax.set_title(title, fontsize=12)
             ax.axis("off")
 
-        # Hide extra empty subplots if grid > 6
+        # Hide unused subplots
         for ax in axs[len(views):]:
             ax.axis("off")
 
@@ -1341,26 +1363,99 @@ def generate_orthographic_views(mesh, layout="2x3"):
         buf = io.BytesIO()
         plt.savefig(buf, format='png', dpi=150, bbox_inches='tight')
         buf.seek(0)
-        combined_img = Image.open(buf)
+        combined_img = Image.open(buf).convert('RGBA')
         plt.close(fig)
 
         return combined_img
     
     except Exception as e:
-        # Return error image
-        fig, ax = plt.subplots(figsize=(10, 6))
-        ax.text(0.5, 0.5, f"Orthographic Views Error: {str(e)}", ha='center', va='center', fontsize=12, color='red')
-        ax.set_xlim(0, 1)
-        ax.set_ylim(0, 1)
-        plt.title("Orthographic Views Error")
+        raise RuntimeError(f"Orthographic Views Error: {str(e)}")
+
+def render_error_to_image(error_message, width=800, height=400, title="Error"):
+    """Create an error image for display purposes"""
+    fig, ax = plt.subplots(figsize=(width/100, height/100))
+    ax.text(0.5, 0.5, str(error_message), ha='center', va='center', 
+            fontsize=12, color='red', wrap=True)
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.set_title(title, fontsize=14, color='red')
+    ax.axis('off')
+    
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', dpi=150, bbox_inches='tight')
+    buf.seek(0)
+    img = Image.open(buf).convert('RGBA')
+    plt.close(fig)
+    
+    return img
+
+def validate_mesh(mesh):
+    """Validate that the mesh object is valid for processing"""
+    if mesh is None:
+        raise ValueError("Mesh is None")
+    
+    if not hasattr(mesh, 'vertices'):
+        raise ValueError("Mesh missing vertices attribute")
+    
+    if not hasattr(mesh, 'faces'):
+        raise ValueError("Mesh missing faces attribute")
+    
+    vertices = mesh.vertices
+    faces = mesh.faces
+    
+    if vertices is None or len(vertices) == 0:
+        raise ValueError("Mesh has no vertices")
+    
+    if faces is None or len(faces) == 0:
+        raise ValueError("Mesh has no faces")
+    
+    if vertices.shape[1] != 3:
+        raise ValueError(f"Vertices must be 3D, got shape {vertices.shape}")
+    
+    if faces.shape[1] != 3:
+        raise ValueError(f"Faces must be triangular, got shape {faces.shape}")
+    
+    # Check for invalid face indices
+    max_vertex_index = len(vertices) - 1
+    if np.any(faces > max_vertex_index):
+        raise ValueError("Faces reference non-existent vertices")
+    
+    if np.any(faces < 0):
+        raise ValueError("Faces contain negative indices")
+    
+    return True
+
+def render_mesh_preview(mesh, title="Mesh Preview", width=600, height=400):
+    """Render a basic mesh preview image"""
+    try:
+        validate_mesh(mesh)
+        
+        fig = plt.figure(figsize=(width/100, height/100))
+        ax = fig.add_subplot(111, projection='3d')
+        
+        vertices = mesh.vertices
+        if hasattr(mesh, 'faces') and len(mesh.faces) > 0:
+            ax.plot_trisurf(vertices[:, 0], vertices[:, 1], vertices[:, 2], 
+                           triangles=mesh.faces, alpha=0.8, shade=True)
+        else:
+            ax.scatter(vertices[:, 0], vertices[:, 1], vertices[:, 2], 
+                      c='blue', s=1, alpha=0.6)
+        
+        ax.set_title(title)
+        ax.set_xlabel('X (mm)')
+        ax.set_ylabel('Y (mm)')
+        ax.set_zlabel('Z (mm)')
         
         buf = io.BytesIO()
         plt.savefig(buf, format='png', dpi=150, bbox_inches='tight')
         buf.seek(0)
-        img = Image.open(buf)
-        plt.close()
+        img = Image.open(buf).convert('RGBA')
+        plt.close(fig)
         
         return img
+        
+    except Exception as e:
+        return render_error_to_image(f"Mesh preview error: {str(e)}", width, height, "Preview Error")
 
 # =====================================================
 # MAIN APPLICATION FUNCTIONS
@@ -1395,15 +1490,24 @@ def process_text_to_cad(prompt, precision_choice="High (parametric)", export_for
         else:
             mesh_3d = cad_generator.generate_3d_model(params)
         
+        # Validate the generated mesh
+        try:
+            validate_mesh(mesh_3d)
+        except Exception as validation_error:
+            raise RuntimeError(f"Generated mesh is invalid: {validation_error}")
+        
         # Generate 3D visualization
         fig_3d = cad_generator.generate_3d_visualization(mesh_3d, params['color'])
         
         # Generate enhanced orthographic views
-        views_result = generate_orthographic_views(mesh_3d, layout=grid_layout)
-        if len(views_result) >= 7:  # 6 individual views + combined
-            ortho_views = views_result[6]  # Use combined view
-        else:
-            ortho_views = views_result[0] if views_result else None
+        try:
+            ortho_views = generate_orthographic_views(mesh_3d, layout=grid_layout)
+        except Exception as ortho_error:
+            print(f"Orthographic views failed: {ortho_error}")
+            ortho_views = render_error_to_image(
+                f"Failed to generate orthographic views: {str(ortho_error)}",
+                title="Orthographic Views Error"
+            )
         
         # Enhanced summary
         dims = params['dimensions']
@@ -1445,23 +1549,31 @@ def process_text_to_cad(prompt, precision_choice="High (parametric)", export_for
         
     except Exception as e:
         error_msg = f"Error generating CAD model: {str(e)}"
+        print(f"CAD Generation Error: {error_msg}")  # Log the error
+        
+        # Create placeholder 3D figure
         placeholder_fig = go.Figure()
-        placeholder_fig.add_annotation(text=error_msg, x=0.5, y=0.5, showarrow=False)
+        placeholder_fig.add_annotation(
+            text=error_msg, 
+            x=0.5, y=0.5, 
+            showarrow=False,
+            font=dict(size=14, color="red")
+        )
+        placeholder_fig.update_layout(
+            title="CAD Generation Failed",
+            xaxis=dict(visible=False),
+            yaxis=dict(visible=False)
+        )
         
-        # Create error image
-        fig, ax = plt.subplots(figsize=(8, 4))
-        ax.text(0.5, 0.5, error_msg, ha='center', va='center', fontsize=12, color='red')
-        ax.set_xlim(0, 1)
-        ax.set_ylim(0, 1)
-        ax.axis('off')
+        # Create standardized error image
+        error_img = render_error_to_image(
+            error_msg, 
+            width=800, 
+            height=400, 
+            title="CAD Generation Error"
+        )
         
-        buf = io.BytesIO()
-        plt.savefig(buf, format='png', dpi=150, bbox_inches='tight')
-        buf.seek(0)
-        error_img = Image.open(buf)
-        plt.close()
-        
-        return placeholder_fig, error_img, error_msg, None
+        return placeholder_fig, error_img, f"❌ **Error:** {error_msg}", None
 
 def process_plate_design(description):
     """Process plate description and generate outputs"""
