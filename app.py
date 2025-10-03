@@ -25,19 +25,49 @@ except ImportError:
     CADQUERY_AVAILABLE = False
     print("⚠️  CadQuery not available - Using Trimesh fallbacks")
 
-# Check boolean backend
-def get_bool_backend_name():
+# Properly setup boolean backend with manifold3d
+BOOL_BACKEND = None
+try:
+    import manifold3d
+    print("✅ Manifold3D imported successfully")
+    
+    # Test if manifold3d is working by creating a simple boolean operation
     try:
-        backend = trimesh.interfaces.boolean.get_bool_engine()
-        return backend
-    except Exception:
-        return None
+        cube1 = trimesh.creation.box(extents=[1, 1, 1])
+        cube2 = trimesh.creation.box(extents=[1, 1, 1])
+        cube2.apply_translation([0.5, 0.5, 0.5])
+        
+        # Try manifold engine specifically
+        result = trimesh.boolean.union([cube1, cube2], engine='manifold')
+        if result is not None and hasattr(result, 'vertices'):
+            BOOL_BACKEND = 'manifold'
+            print("✅ Manifold3D boolean backend working correctly")
+        else:
+            raise Exception("Manifold returned None or invalid result")
+            
+    except Exception as e:
+        print(f"⚠️ Manifold3D specific test failed: {e}")
+        # Try auto-detection (trimesh will choose best available backend)
+        try:
+            result = trimesh.boolean.union([cube1, cube2])
+            if result is not None and hasattr(result, 'vertices'):
+                BOOL_BACKEND = 'auto'
+                print("✅ Trimesh boolean backend (auto) working")
+            else:
+                print("⚠️ Auto-detection returned None result")
+        except Exception as e2:
+            print(f"⚠️ Auto boolean backend also failed: {e2}")
+            # Set a fallback - we'll use safe operations
+            BOOL_BACKEND = 'fallback'
+            print("⚠️ Using fallback boolean operations")
+            
+except ImportError as e:
+    print(f"⚠️ Manifold3D import failed: {e}")
+    print("To install: pip install manifold3d")
+    BOOL_BACKEND = 'fallback'
+    print("⚠️ Using fallback boolean operations")
 
-BOOL_BACKEND = get_bool_backend_name()
-if BOOL_BACKEND is None:
-    print("⚠️  No boolean backend detected. Install 'manifold3d' for robust operations")
-else:
-    print(f"✅ Boolean backend detected: {BOOL_BACKEND}")
+print(f"✅ Boolean backend active: {BOOL_BACKEND}")
 
 # =====================================================
 # ENHANCED CAD UTILITIES
@@ -66,31 +96,65 @@ def cq_to_trimesh(cq_obj):
 
 def safe_union(a, b):
     """Enhanced union with multiple fallback strategies"""
-    if hasattr(a, "union"):
+    if not isinstance(a, trimesh.Trimesh) or not isinstance(b, trimesh.Trimesh):
+        print("Warning: Non-Trimesh objects in union operation")
+        if hasattr(a, "union"):
+            try:
+                return a.union(b)
+            except Exception:
+                pass
+        return a
+    
+    # Try with the detected backend first
+    if BOOL_BACKEND == 'manifold':
         try:
-            return a.union(b)
-        except Exception:
-            pass
+            return trimesh.boolean.union([a, b], engine='manifold')
+        except Exception as e:
+            print(f"Manifold union failed: {e}, trying fallback")
+    
+    # Try auto-detection if not fallback mode
+    if BOOL_BACKEND != 'fallback':
+        try:
+            return trimesh.boolean.union([a, b])
+        except Exception as e:
+            print(f"Auto union failed: {e}, using concatenation fallback")
+    
+    # Fallback: concatenate meshes
     try:
-        return trimesh.boolean.union([a, b], engine=BOOL_BACKEND)
-    except Exception:
-        try:
-            combined = trimesh.util.concatenate([a, b])
-            return combined
-        except Exception:
-            return a
+        combined = trimesh.util.concatenate([a, b])
+        return combined
+    except Exception as e:
+        print(f"Concatenation fallback failed: {e}, returning first mesh")
+        return a
 
 def safe_difference(a, b):
     """Enhanced difference with multiple fallback strategies"""
-    if hasattr(a, "difference"):
-        try:
-            return a.difference(b)
-        except Exception:
-            pass
-    try:
-        return trimesh.boolean.difference([a, b], engine=BOOL_BACKEND)
-    except Exception:
+    if not isinstance(a, trimesh.Trimesh) or not isinstance(b, trimesh.Trimesh):
+        print("Warning: Non-Trimesh objects in difference operation")
+        if hasattr(a, "difference"):
+            try:
+                return a.difference(b)
+            except Exception:
+                pass
         return a
+    
+    # Try with the detected backend first
+    if BOOL_BACKEND == 'manifold':
+        try:
+            return trimesh.boolean.difference([a, b], engine='manifold')
+        except Exception as e:
+            print(f"Manifold difference failed: {e}, trying fallback")
+    
+    # Try auto-detection if not fallback mode
+    if BOOL_BACKEND != 'fallback':
+        try:
+            return trimesh.boolean.difference([a, b])
+        except Exception as e:
+            print(f"Auto difference failed: {e}, returning original mesh")
+    
+    # Fallback: return original mesh (can't do difference without boolean backend)
+    print("Warning: No boolean backend available for difference operation, returning original mesh")
+    return a
 
 def export_mesh(mesh, filename):
     """Export mesh to various formats"""
