@@ -1,5 +1,5 @@
 ---
-title: KelmoidAI_Genesis LLM prototype
+title: KelmoidAI_Genesis_LLM_prototype
 app_file: app.py
 sdk: gradio
 sdk_version: 5.46.0
