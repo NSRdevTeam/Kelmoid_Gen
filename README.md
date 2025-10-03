@@ -1,16 +1,11 @@
 ---
-title: Kelmoid Genesis LLM Prototype
-emoji: 🔧
-colorFrom: blue
-colorTo: green
-sdk: gradio
-sdk_version: 5.47.2
+title: KelmoidAI_Genesis LLM prototype
 app_file: app.py
-pinned: false
-license: mit
+sdk: gradio
+sdk_version: 5.46.0
 ---
 
-# Kelmoid Genesis LLM Prototype
+# KelmoidAI_Genesis LLM prototype
 
 A comprehensive CAD engineering suite powered by AI and natural language processing.
 

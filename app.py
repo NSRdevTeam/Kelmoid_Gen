@@ -1681,10 +1681,10 @@ def process_cfd_simulation(length, height, grid_x, grid_y, inlet_vel, density, v
 def create_gradio_interface():
     """Create comprehensive Gradio interface"""
     
-    with gr.Blocks(title="Kelmoid Genesis LLM Prototype", theme=gr.themes.Soft()) as demo:
+    with gr.Blocks(title="KelmoidAI_Genesis LLM prototype", theme=gr.themes.Soft()) as demo:
         
         gr.Markdown("""
-        # 🔧 Kelmoid Genesis LLM Prototype
+        # 🔧 KelmoidAI_Genesis LLM prototype
         **AI-Powered CAD Engineering Suite for Design, Analysis, and Manufacturing**
         
         This suite includes:
