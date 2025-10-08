@@ -16,6 +16,13 @@ from PIL import Image, ImageDraw, ImageFont
 import warnings
 warnings.filterwarnings('ignore')
 
+# Optional LLM Text-to-CAD engine
+try:
+    from llm_engine import LLMTextToCAD, LLM_AVAILABLE
+except Exception:
+    LLMTextToCAD = None
+    LLM_AVAILABLE = False
+
 # Enhanced imports for parametric CAD
 try:
     import cadquery as cq
@@ -367,12 +374,19 @@ class TextToCADGenerator:
                 else:
                     dimensions[key] = value
         
-        # Handle patterns like "10x20x30"
-        dimension_match = re.search(r'(\d+\.?\d*)\s*[x×]\s*(\d+\.?\d*)\s*[x×]\s*(\d+\.?\d*)', prompt)
-        if dimension_match:
-            dimensions['length'] = float(dimension_match.group(1))
-            dimensions['width'] = float(dimension_match.group(2))
-            dimensions['height'] = float(dimension_match.group(3))
+        # Handle patterns like "10x20x30" or "10mm x 20mm x 30mm"
+        dimension_patterns = [
+            r'(\d+\.?\d*)\s*[x×]\s*(\d+\.?\d*)\s*[x×]\s*(\d+\.?\d*)',  # "10x20x30"
+            r'(\d+\.?\d*)\s*(?:mm|cm|inches?)\s*[x×]\s*(\d+\.?\d*)\s*(?:mm|cm|inches?)\s*[x×]\s*(\d+\.?\d*)\s*(?:mm|cm|inches?)',  # "10mm x 20mm x 30mm"
+        ]
+        
+        for pattern in dimension_patterns:
+            dimension_match = re.search(pattern, prompt, re.IGNORECASE)
+            if dimension_match:
+                dimensions['length'] = float(dimension_match.group(1))
+                dimensions['width'] = float(dimension_match.group(2))
+                dimensions['height'] = float(dimension_match.group(3))
+                break
         
         return dimensions
 
@@ -1528,14 +1542,42 @@ def render_mesh_preview(mesh, title="Mesh Preview", width=600, height=400):
 # Initialize CAD generator
 cad_generator = TextToCADGenerator()
 
-def process_text_to_cad(prompt, precision_choice="High (parametric)", export_format="stl", grid_layout="2x3"):
-    """Enhanced CAD processing with precision modes and export capabilities"""
+def process_text_to_cad(prompt, precision_choice="High (parametric)", export_format="stl", grid_layout="2x3", use_llm=False):
+    """Enhanced CAD processing with precision modes and optional LLM parsing."""
     try:
-        params = cad_generator.parse_prompt(prompt)
-        
+        params = None
+
+        # If LLM is enabled and available, attempt to use it to parse prompt
+        if use_llm and LLM_AVAILABLE and LLMTextToCAD is not None:
+            try:
+                llm = LLMTextToCAD()
+                if llm.available():
+                    llm_result = llm.compile(prompt)
+                    if llm_result.get("success"):
+                        schema = llm_result["schema"]
+                        # Map schema to our internal params
+                        dims = schema.get("dimensions", {})
+                        # Ensure numeric and filter
+                        dims = filter_numeric(dims)
+                        color = schema.get("color") or 'lightblue'
+                        shape = (schema.get("shape") or 'cube').replace(' ', '_')
+                        params = {
+                            'shape': shape if shape in cad_generator.shapes_library else 'cube',
+                            'dimensions': dims,
+                            'color': color,
+                            'precision': 'high',
+                            'prompt': prompt
+                        }
+            except Exception as e:
+                print(f"LLM parse failed, falling back: {e}")
+
+        # Fallback to legacy parsing if no LLM params
+        if params is None:
+            params = cad_generator.parse_prompt(prompt)
+
         # Override precision based on UI choice
         params['precision'] = 'high' if precision_choice.lower().startswith('h') else 'fast'
-        
+
         # Use parametric builders for high precision when available
         if params['precision'] == 'high' and params['shape'] in ['washer', 'nut', 'bracket', 'door', 'window']:
             # Try parametric version first
@@ -1553,16 +1595,16 @@ def process_text_to_cad(prompt, precision_choice="High (parametric)", export_for
                 mesh_3d = cad_generator.generate_3d_model(params)
         else:
             mesh_3d = cad_generator.generate_3d_model(params)
-        
+
         # Validate the generated mesh
         try:
             validate_mesh(mesh_3d)
         except Exception as validation_error:
             raise RuntimeError(f"Generated mesh is invalid: {validation_error}")
-        
+
         # Generate 3D visualization
         fig_3d = cad_generator.generate_3d_visualization(mesh_3d, params['color'])
-        
+
         # Generate enhanced orthographic views
         try:
             ortho_views = generate_orthographic_views(mesh_3d, layout=grid_layout)
@@ -1572,17 +1614,17 @@ def process_text_to_cad(prompt, precision_choice="High (parametric)", export_for
                 f"Failed to generate orthographic views: {str(ortho_error)}",
                 title="Orthographic Views Error"
             )
-        
+
         # Enhanced summary
         dims = params['dimensions']
         dim_summary = []
         for key, value in dims.items():
             if value is not None and key in ['length', 'width', 'height', 'radius', 'diameter', 'thickness']:
                 dim_summary.append(f"{key.title()}: {value}mm")
-        
+
         backend_info = "✅ CadQuery (parametric)" if CADQUERY_AVAILABLE and params['precision'] == 'high' else "⚡ Trimesh (fast)"
         boolean_info = f"Boolean backend: {BOOL_BACKEND}" if BOOL_BACKEND else "No boolean backend"
-        
+
         summary = f"""
 **🔧 Generated CAD Model Summary:**
 - **Shape:** {params['shape'].replace('_', ' ').replace('parametric ', '').title()}
@@ -1595,7 +1637,7 @@ def process_text_to_cad(prompt, precision_choice="High (parametric)", export_for
 
 ✅ The model has been successfully generated with 6-view orthographic projections.
 """
-        
+
         # Optional export
         export_path = None
         if export_format and mesh_3d:
@@ -1608,18 +1650,18 @@ def process_text_to_cad(prompt, precision_choice="High (parametric)", export_for
             except Exception as e:
                 export_path = None
                 print(f"Export error: {e}")
-        
+
         return fig_3d, ortho_views, summary, export_path
-        
+
     except Exception as e:
         error_msg = f"Error generating CAD model: {str(e)}"
         print(f"CAD Generation Error: {error_msg}")  # Log the error
-        
+
         # Create placeholder 3D figure
         placeholder_fig = go.Figure()
         placeholder_fig.add_annotation(
-            text=error_msg, 
-            x=0.5, y=0.5, 
+            text=error_msg,
+            x=0.5, y=0.5,
             showarrow=False,
             font=dict(size=14, color="red")
         )
@@ -1628,15 +1670,15 @@ def process_text_to_cad(prompt, precision_choice="High (parametric)", export_for
             xaxis=dict(visible=False),
             yaxis=dict(visible=False)
         )
-        
+
         # Create standardized error image
         error_img = render_error_to_image(
-            error_msg, 
-            width=800, 
-            height=400, 
+            error_msg,
+            width=800,
+            height=400,
             title="CAD Generation Error"
         )
-        
+
         return placeholder_fig, error_img, f"❌ **Error:** {error_msg}", None
 
 def process_plate_design(description):
@@ -1727,6 +1769,7 @@ def create_gradio_interface():
                                 value="2x3", 
                                 label="Orthographic Layout"
                             )
+                        use_llm = gr.Checkbox(label="Use LLM (Text-to-CAD compiler)", value=False, info="Requires OPENAI_API_KEY or HF_API_TOKEN in environment. Falls back automatically if unavailable.")
                         
                         cad_generate_btn = gr.Button("🚀 Generate CAD Model", variant="primary", size="lg")
                         download_file = gr.File(label="Download CAD File", visible=False)
@@ -1778,7 +1821,7 @@ def create_gradio_interface():
                 
                 cad_generate_btn.click(
                     fn=process_text_to_cad,
-                    inputs=[cad_prompt, precision_choice, export_format, grid_layout],
+                    inputs=[cad_prompt, precision_choice, export_format, grid_layout, use_llm],
                     outputs=[cad_3d_output, cad_ortho_output, cad_summary_output, download_file]
                 )
             
