@@ -7,7 +7,6 @@ to better understand CAD and geometry terminology, creating a unique
 "Text-to-CAD compiler" dataset for machine learning.
 
 Author: KelmoidAI Genesis Team
-License: MIT
 """
 
 import json
