@@ -1,0 +1,41 @@
+# GUI Framework
+PySide6>=6.5.0
+
+# 3D Graphics and Rendering
+moderngl>=5.8.0
+moderngl-window>=2.4.0
+PyOpenGL>=3.1.6
+
+# Mathematical Libraries
+numpy>=1.21.0
+scipy>=1.9.0
+
+# 3D Mesh Processing
+open3d>=0.16.0
+trimesh>=3.15.0
+
+# Geometry and CSG Operations
+python-fcl>=0.7.0
+pymeshlab>=2022.2
+
+# Code Editor Features
+QScintilla>=2.13.0
+
+# File I/O
+ply>=3.11
+
+# Configuration and Settings
+pyyaml>=6.0
+
+# Performance and Optimization
+numba>=0.56.0
+
+# Development and Testing
+pytest>=7.0.0
+pytest-qt>=4.0.0
+black>=22.0.0
+flake8>=5.0.0
+
+# Optional: For better mesh operations
+scikit-image>=0.19.0
+matplotlib>=3.5.0

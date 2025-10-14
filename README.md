@@ -7,16 +7,20 @@ This monorepo unifies two projects while preserving their Git histories:
 Merge strategy: git subtree with per-project prefixes under the repository root.
 
 Imported structure:
-- MECH_MIND/ (imported via git subtree)
-- AdvancedCAD/ (pending import — provide Git URL or local repo path to preserve history)
+- MECH_MIND/ (imported)
+- AdvancedCAD/ (imported from local snapshot; history not preserved)
 
-Quick start (demo CAD export):
-- Ensure AdvancedCAD core is available either inside this repo at `AdvancedCAD/src` or as a sibling directory `../AdvancedCAD/src`.
-- Create a virtual environment and install dependencies for AdvancedCAD if not already:
-  - Windows: `python -m venv venv && venv\Scripts\activate && pip install -r ../AdvancedCAD/requirements.txt`
-- Run the demo:
-  - `python scripts/generate_cad_demo.py`
-- The STL will be written to `outputs/demo_model.stl`.
+Setup (Windows PowerShell):
+- python -m venv venv
+- venv\Scripts\Activate
+- pip install -r requirements.txt
 
-To preserve AdvancedCAD history in this monorepo:
-- Provide the Git URL or local path to the AdvancedCAD repository and branch name. We will import it with `git subtree add --prefix=AdvancedCAD <remote> <branch>` preserving its full history.
+Run the Gradio app:
+- python MECH_MIND/app.py
+
+Generate a CAD demo (exports to outputs/demo_model.stl):
+- python scripts/generate_cad_demo.py
+
+Note on Git history:
+- AdvancedCAD was added from the local workspace. If you want to preserve its Git history in this monorepo, provide the remote URL/branch and we can re-import using:
+  git subtree add --prefix=AdvancedCAD <remote> <branch>

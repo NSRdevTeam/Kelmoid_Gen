@@ -1,0 +1,645 @@
+// AdvancedCAD Practical Examples Collection
+// This file contains a variety of practical examples demonstrating
+// the capabilities of AdvancedCAD for real-world applications
+
+//==============================================================================
+// EXAMPLE 1: MECHANICAL PARTS - Motor Mount
+//==============================================================================
+
+// Parameters for motor mount
+motor_diameter = 42;        // NEMA 17 motor diameter
+motor_length = 48;
+mounting_hole_spacing = 31; // Distance between mounting holes
+mounting_hole_diameter = 3;
+base_thickness = 6;
+wall_thickness = 3;
+clearance = 2;
+
+module motor_mount() {
+    // Calculate derived dimensions
+    outer_size = motor_diameter + 2 * wall_thickness + 2 * clearance;
+    inner_size = motor_diameter + 2 * clearance;
+    
+    difference() {
+        // Base plate with mounting ears
+        union() {
+            // Main base plate
+            cube([outer_size, outer_size, base_thickness], center=true);
+            
+            // Mounting ears
+            for (angle = [0:90:270]) {
+                rotate([0, 0, angle]) {
+                    translate([outer_size/2, 0, 0]) {
+                        cube([15, 20, base_thickness], center=true);
+                    }
+                }
+            }
+        }
+        
+        // Motor cutout
+        translate([0, 0, wall_thickness/2]) {
+            cube([inner_size, inner_size, base_thickness], center=true);
+        }
+        
+        // Motor mounting holes
+        for (x = [-1, 1]) {
+            for (y = [-1, 1]) {
+                translate([x * mounting_hole_spacing/2, 
+                          y * mounting_hole_spacing/2, 
+                          -base_thickness/2 - 1]) {
+                    cylinder(h = base_thickness + 2, 
+                            d = mounting_hole_diameter);
+                }
+            }
+        }
+        
+        // Mounting ear holes
+        for (angle = [0:90:270]) {
+            rotate([0, 0, angle]) {
+                translate([outer_size/2 + 7.5, 0, 0]) {
+                    cylinder(h = base_thickness + 2, 
+                            d = 5, center=true);
+                }
+            }
+        }
+    }
+}
+
+//==============================================================================
+// EXAMPLE 2: ENCLOSURES - Electronics Box
+//==============================================================================
+
+// Parameters for electronics enclosure
+box_width = 100;
+box_height = 60;
+box_depth = 40;
+wall_thickness = 2;
+lid_thickness = 3;
+corner_radius = 4;
+vent_hole_diameter = 3;
+vent_spacing = 8;
+
+module electronics_enclosure() {
+    // Main box
+    difference() {
+        // Outer shell with rounded corners
+        hull() {
+            for (x = [corner_radius, box_width - corner_radius]) {
+                for (y = [corner_radius, box_height - corner_radius]) {
+                    for (z = [corner_radius, box_depth - corner_radius]) {
+                        translate([x, y, z]) {
+                            sphere(r = corner_radius);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Inner cavity
+        translate([wall_thickness, wall_thickness, wall_thickness]) {
+            inner_width = box_width - 2 * wall_thickness;
+            inner_height = box_height - 2 * wall_thickness;
+            inner_depth = box_depth - wall_thickness;
+            
+            hull() {
+                cr = corner_radius - wall_thickness/2;
+                for (x = [cr, inner_width - cr]) {
+                    for (y = [cr, inner_height - cr]) {
+                        for (z = [cr, inner_depth - cr]) {
+                            translate([x, y, z]) {
+                                sphere(r = cr);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Ventilation holes on sides
+        for (side = [0, 1]) {
+            for (row = [1:2]) {
+                for (col = [1:3]) {
+                    x_pos = side == 0 ? -wall_thickness/2 : box_width + wall_thickness/2;
+                    y_pos = col * (box_height / 4);
+                    z_pos = row * (box_depth / 3);
+                    
+                    translate([x_pos, y_pos, z_pos]) {
+                        rotate([0, 90, 0]) {
+                            cylinder(h = wall_thickness + 1, 
+                                   d = vent_hole_diameter, center=true);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // Mounting posts for PCB
+    post_height = 8;
+    post_diameter = 6;
+    screw_hole_diameter = 2.5;
+    
+    for (x = [15, box_width - 15]) {
+        for (y = [15, box_height - 15]) {
+            translate([x, y, wall_thickness]) {
+                difference() {
+                    cylinder(h = post_height, d = post_diameter);
+                    translate([0, 0, -1]) {
+                        cylinder(h = post_height + 2, d = screw_hole_diameter);
+                    }
+                }
+            }
+        }
+    }
+}
+
+//==============================================================================
+// EXAMPLE 3: HOUSEHOLD ITEMS - Parametric Drawer Organizer
+//==============================================================================
+
+// Parameters for drawer organizer
+drawer_width = 300;
+drawer_depth = 200;
+organizer_height = 40;
+divider_thickness = 2;
+compartment_sizes = [
+    [80, 60],   // Large compartment
+    [40, 60],   // Medium compartment 1
+    [40, 60],   // Medium compartment 2
+    [60, 40],   // Small compartment 1
+    [60, 40],   // Small compartment 2
+    [40, 40]    // Small compartment 3
+];
+
+module drawer_organizer() {
+    // Calculate total area needed
+    total_area = 0;
+    for (comp = compartment_sizes) {
+        total_area = total_area + comp[0] * comp[1];
+    }
+    
+    // Base tray
+    difference() {
+        cube([drawer_width, drawer_depth, organizer_height]);
+        
+        // Hollow out interior
+        translate([divider_thickness, divider_thickness, divider_thickness]) {
+            cube([drawer_width - 2*divider_thickness, 
+                  drawer_depth - 2*divider_thickness, 
+                  organizer_height]);
+        }
+        
+        // Optional: rounded corners for easier cleaning
+        for (x = [0, drawer_width]) {
+            for (y = [0, drawer_depth]) {
+                translate([x, y, -1]) {
+                    cylinder(h = organizer_height + 2, r = 3);
+                }
+            }
+        }
+    }
+    
+    // Dividers - simplified layout
+    // Vertical divider
+    translate([drawer_width/2 - divider_thickness/2, 0, divider_thickness]) {
+        cube([divider_thickness, drawer_depth, organizer_height - divider_thickness]);
+    }
+    
+    // Horizontal dividers
+    translate([0, drawer_depth/3, divider_thickness]) {
+        cube([drawer_width, divider_thickness, organizer_height - divider_thickness]);
+    }
+    translate([0, 2*drawer_depth/3, divider_thickness]) {
+        cube([drawer_width, divider_thickness, organizer_height - divider_thickness]);
+    }
+    
+    // Cross divider in right section
+    translate([drawer_width/2, drawer_depth/2 - divider_thickness/2, divider_thickness]) {
+        cube([drawer_width/2, divider_thickness, organizer_height - divider_thickness]);
+    }
+}
+
+//==============================================================================
+// EXAMPLE 4: ARTISTIC - Twisted Vase with Pattern
+//==============================================================================
+
+// Parameters for artistic vase
+vase_height = 120;
+base_radius = 30;
+top_radius = 20;
+wall_thickness = 3;
+twist_angle = 180;
+pattern_depth = 2;
+pattern_spacing = 8;
+
+module twisted_vase() {
+    difference() {
+        // Main vase body - twisted
+        linear_extrude(height = vase_height, 
+                      twist = twist_angle, 
+                      scale = top_radius/base_radius,
+                      slices = 60) {
+            circle(r = base_radius);
+        }
+        
+        // Hollow interior
+        translate([0, 0, wall_thickness]) {
+            linear_extrude(height = vase_height, 
+                          twist = twist_angle, 
+                          scale = (top_radius - wall_thickness)/(base_radius - wall_thickness),
+                          slices = 60) {
+                circle(r = base_radius - wall_thickness);
+            }
+        }
+        
+        // Decorative pattern
+        for (level = [0:pattern_spacing:vase_height-pattern_spacing]) {
+            for (angle = [0:30:330]) {
+                hull() {
+                    translate([0, 0, level]) {
+                        rotate([0, 0, angle]) {
+                            translate([base_radius - pattern_depth/2, 0, 0]) {
+                                sphere(r = pattern_depth/2);
+                            }
+                        }
+                    }
+                    translate([0, 0, level + pattern_spacing/2]) {
+                        rotate([0, 0, angle + twist_angle * (level/vase_height)]) {
+                            translate([base_radius - pattern_depth/2, 0, 0]) {
+                                sphere(r = pattern_depth/2);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // Base ring for stability
+    translate([0, 0, 0]) {
+        difference() {
+            cylinder(h = 5, r = base_radius + 3);
+            translate([0, 0, -1]) {
+                cylinder(h = 7, r = base_radius - 2);
+            }
+        }
+    }
+}
+
+//==============================================================================
+// EXAMPLE 5: TOOLS - Adjustable Wrench Handle
+//==============================================================================
+
+// Parameters for tool handle
+handle_length = 120;
+handle_diameter = 16;
+grip_length = 80;
+grip_pattern_depth = 1;
+tool_insert_diameter = 8;
+tool_insert_depth = 25;
+
+module tool_handle() {
+    difference() {
+        union() {
+            // Main handle shaft
+            cylinder(h = handle_length, d = handle_diameter);
+            
+            // Grip texture
+            for (ring = [10:5:grip_length]) {
+                translate([0, 0, ring]) {
+                    difference() {
+                        cylinder(h = 3, d = handle_diameter + 1);
+                        translate([0, 0, -1]) {
+                            cylinder(h = 5, d = handle_diameter - 2*grip_pattern_depth);
+                        }
+                    }
+                }
+            }
+            
+            // End cap
+            translate([0, 0, handle_length]) {
+                sphere(d = handle_diameter);
+            }
+        }
+        
+        // Tool insert hole
+        translate([0, 0, -1]) {
+            cylinder(h = tool_insert_depth + 1, d = tool_insert_diameter);
+        }
+        
+        // Cross hole for securing tool
+        translate([0, 0, tool_insert_depth/2]) {
+            rotate([90, 0, 0]) {
+                cylinder(h = handle_diameter + 2, d = 3, center=true);
+            }
+        }
+        
+        // Knurling pattern on grip
+        for (angle = [0:15:345]) {
+            for (z_pos = [15:2:grip_length]) {
+                rotate([0, 0, angle]) {
+                    translate([handle_diameter/2, 0, z_pos]) {
+                        rotate([45, 0, 0]) {
+                            cube([grip_pattern_depth*2, 0.5, 0.5], center=true);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+//==============================================================================
+// EXAMPLE 6: ARCHITECTURAL - Decorative Wall Bracket
+//==============================================================================
+
+// Parameters for wall bracket
+bracket_width = 80;
+bracket_depth = 60;
+bracket_height = 40;
+mounting_hole_diameter = 6;
+decorative_cutouts = true;
+
+module wall_bracket() {
+    difference() {
+        // Main bracket shape
+        hull() {
+            // Back plate
+            translate([0, 0, 0]) {
+                cube([bracket_width, 5, bracket_height]);
+            }
+            
+            // Support triangle
+            translate([0, bracket_depth-5, 0]) {
+                cube([bracket_width, 5, 5]);
+            }
+            
+            // Front curve
+            translate([bracket_width/2, bracket_depth, bracket_height/2]) {
+                rotate([90, 0, 0]) {
+                    cylinder(h = 5, d = bracket_height);
+                }
+            }
+        }
+        
+        // Mounting holes
+        for (pos = [15, bracket_width-15]) {
+            translate([pos, -1, bracket_height/2]) {
+                rotate([-90, 0, 0]) {
+                    cylinder(h = 10, d = mounting_hole_diameter);
+                }
+            }
+        }
+        
+        // Weight reduction and decorative cutouts
+        if (decorative_cutouts) {
+            // Triangular cutouts
+            for (x = [20, 40, 60]) {
+                translate([x, 15, 15]) {
+                    rotate([90, 0, 0]) {
+                        linear_extrude(height = 20) {
+                            polygon([[-8, 0], [8, 0], [0, 12]]);
+                        }
+                    }
+                }
+            }
+            
+            // Circular cutout at front
+            translate([bracket_width/2, bracket_depth + 1, bracket_height/2]) {
+                rotate([90, 0, 0]) {
+                    cylinder(h = 10, d = 20);
+                }
+            }
+        }
+    }
+}
+
+//==============================================================================
+// EXAMPLE 7: MECHANICAL - Timing Belt Pulley
+//==============================================================================
+
+// Parameters for GT2 timing belt pulley
+teeth_count = 20;
+belt_width = 6;
+hub_diameter = 12;
+hub_height = 15;
+bore_diameter = 5;
+tooth_pitch = 2; // GT2 belt pitch
+
+module timing_pulley() {
+    pitch_diameter = teeth_count * tooth_pitch / PI;
+    outer_diameter = pitch_diameter + 1.5; // Approximate
+    
+    difference() {
+        union() {
+            // Main pulley body with teeth
+            linear_extrude(height = belt_width) {
+                // Approximate tooth profile
+                difference() {
+                    circle(d = outer_diameter);
+                    
+                    // Tooth spaces
+                    for (tooth = [0:teeth_count-1]) {
+                        angle = tooth * (360 / teeth_count);
+                        rotate([0, 0, angle]) {
+                            translate([pitch_diameter/2, 0, 0]) {
+                                square([2, 1], center=true);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Hub
+            cylinder(h = hub_height, d = hub_diameter);
+            
+            // Flanges to keep belt in place
+            cylinder(h = 1, d = outer_diameter + 2);
+            translate([0, 0, belt_width - 1]) {
+                cylinder(h = 1, d = outer_diameter + 2);
+            }
+        }
+        
+        // Bore hole
+        translate([0, 0, -1]) {
+            cylinder(h = hub_height + 2, d = bore_diameter);
+        }
+        
+        // Setscrew hole
+        translate([hub_diameter/2, 0, hub_height/2]) {
+            rotate([0, 90, 0]) {
+                cylinder(h = 5, d = 2.5);
+            }
+        }
+    }
+}
+
+//==============================================================================
+// EXAMPLE 8: CONTAINERS - Stackable Storage Box
+//==============================================================================
+
+// Parameters for stackable box
+box_outer_width = 150;
+box_outer_depth = 100;
+box_outer_height = 50;
+wall_thickness = 2;
+rim_height = 3;
+stacking_lip = 2;
+
+module stackable_box() {
+    inner_width = box_outer_width - 2 * wall_thickness;
+    inner_depth = box_outer_depth - 2 * wall_thickness;
+    inner_height = box_outer_height - wall_thickness - rim_height;
+    
+    difference() {
+        // Outer shell
+        cube([box_outer_width, box_outer_depth, box_outer_height]);
+        
+        // Inner cavity
+        translate([wall_thickness, wall_thickness, wall_thickness]) {
+            cube([inner_width, inner_depth, inner_height + rim_height]);
+        }
+        
+        // Stacking recess on top
+        translate([stacking_lip, stacking_lip, box_outer_height - rim_height]) {
+            cube([box_outer_width - 2*stacking_lip, 
+                  box_outer_depth - 2*stacking_lip, 
+                  rim_height + 1]);
+        }
+        
+        // Handle cutouts
+        for (side = [0, 1]) {
+            x_pos = side == 0 ? -1 : box_outer_width - wall_thickness + 1;
+            translate([x_pos, box_outer_depth/2, box_outer_height/2]) {
+                rotate([0, 90, 0]) {
+                    hull() {
+                        cylinder(h = wall_thickness + 2, d = 20);
+                        translate([0, 0, 0]) {
+                            cylinder(h = wall_thickness + 2, d = 15);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Corner radius for easier printing
+        for (x = [0, box_outer_width]) {
+            for (y = [0, box_outer_depth]) {
+                translate([x, y, -1]) {
+                    cylinder(h = wall_thickness + 2, r = 2);
+                }
+            }
+        }
+    }
+    
+    // Stacking rim on bottom
+    difference() {
+        translate([0, 0, 0]) {
+            cube([box_outer_width, box_outer_depth, wall_thickness + stacking_lip]);
+        }
+        
+        translate([stacking_lip, stacking_lip, -1]) {
+            cube([box_outer_width - 2*stacking_lip, 
+                  box_outer_depth - 2*stacking_lip, 
+                  wall_thickness + stacking_lip + 2]);
+        }
+    }
+}
+
+//==============================================================================
+// EXAMPLE USAGE - Choose which example to render
+//==============================================================================
+
+// Uncomment ONE of the following lines to render that example:
+
+// motor_mount();
+// electronics_enclosure();
+// drawer_organizer();
+// twisted_vase();
+// tool_handle();
+// wall_bracket();
+// timing_pulley();
+stackable_box();
+
+// For comparison or assembly views, you can render multiple items:
+/*
+translate([0, 0, 0]) motor_mount();
+translate([100, 0, 0]) electronics_enclosure();
+translate([200, 0, 0]) wall_bracket();
+*/
+
+//==============================================================================
+// UTILITY MODULES - Reusable components
+//==============================================================================
+
+// Standard metric screw holes
+module metric_screw_hole(diameter, length, countersink=false) {
+    cylinder(h=length, d=diameter);
+    if (countersink) {
+        translate([0, 0, length-2]) {
+            cylinder(h=2.1, d1=diameter, d2=diameter*2);
+        }
+    }
+}
+
+// Rounded rectangle profile
+module rounded_rect(size, radius, center=false) {
+    x = size[0];
+    y = size[1];
+    r = radius;
+    
+    translate(center ? [-x/2, -y/2, 0] : [0, 0, 0]) {
+        hull() {
+            translate([r, r, 0]) circle(r=r);
+            translate([x-r, r, 0]) circle(r=r);
+            translate([x-r, y-r, 0]) circle(r=r);
+            translate([r, y-r, 0]) circle(r=r);
+        }
+    }
+}
+
+// Standard bearing seat (608 bearing example)
+module bearing_seat_608() {
+    // 608 bearing: 8mm bore, 22mm outer, 7mm thick
+    difference() {
+        cylinder(h=8, d=26);  // Housing
+        translate([0, 0, 0.5]) {
+            cylinder(h=7, d=22.2);  // Bearing fit
+        }
+        translate([0, 0, -1]) {
+            cylinder(h=10, d=8.2);  // Shaft clearance
+        }
+    }
+}
+
+/*
+NOTES FOR USERS:
+
+1. Each example demonstrates different features:
+   - motor_mount(): Basic subtractive modeling, loops, positioning
+   - electronics_enclosure(): Hull operations, complex geometry, ventilation
+   - drawer_organizer(): Parametric arrays, practical household items
+   - twisted_vase(): Linear extrude with twist, artistic applications
+   - tool_handle(): Surface textures, functional design
+   - wall_bracket(): Architectural elements, decorative features
+   - timing_pulley(): Precise mechanical parts, repetitive features
+   - stackable_box(): Interlocking designs, practical storage
+
+2. Parameters at the top of each module make them easily customizable
+
+3. All examples are designed with 3D printing considerations:
+   - Avoid overhangs where possible
+   - Include draft angles
+   - Consider support material requirements
+
+4. Utility modules at the bottom provide reusable components
+
+5. To use these examples:
+   - Copy the module you want to a new file
+   - Modify parameters as needed
+   - Add or remove features
+   - Export as STL for 3D printing
+
+6. These examples show real-world applications and can serve as starting
+   points for your own designs.
+*/

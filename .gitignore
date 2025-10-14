@@ -6,5 +6,19 @@ Thumbs.db
 __pycache__/
 *.py[cod]
 
+# Virtual environments
+venv/
+.env
+.env.*
+
+# App outputs and logs
+outputs/
+logs/
+*.log
+
+# Gradio caches
+.gradio/
+MECH_MIND/.gradio/
+
 # Node (if present)
 node_modules/

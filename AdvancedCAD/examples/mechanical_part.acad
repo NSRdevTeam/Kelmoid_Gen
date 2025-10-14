@@ -1,0 +1,130 @@
+// AdvancedCAD Example: Mechanical Bracket
+// This example demonstrates various features of AdvancedCAD
+
+// Global parameters - these will appear in the parameter panel
+bracket_width = 40;
+bracket_height = 30;
+bracket_depth = 15;
+bracket_thickness = 3;
+
+// Hole parameters
+mounting_hole_diameter = 6;
+mounting_hole_spacing = 25;
+center_hole_diameter = 12;
+
+// Chamfer and fillet parameters
+corner_radius = 2;
+chamfer_size = 1;
+
+// Materials and colors
+bracket_color = "gray";
+highlight_color = "red";
+
+// Main bracket body
+module main_bracket() {
+    difference() {
+        // Outer shape with rounded corners
+        hull() {
+            for (x = [corner_radius, bracket_width - corner_radius]) {
+                for (y = [corner_radius, bracket_height - corner_radius]) {
+                    translate([x, y, 0])
+                        cylinder(r = corner_radius, h = bracket_depth, $fn = 16);
+                }
+            }
+        }
+        
+        // Inner cutout
+        translate([bracket_thickness, bracket_thickness, bracket_thickness])
+            cube([
+                bracket_width - 2 * bracket_thickness,
+                bracket_height - 2 * bracket_thickness,
+                bracket_depth
+            ]);
+        
+        // Mounting holes
+        for (x = [(bracket_width - mounting_hole_spacing) / 2,
+                  (bracket_width + mounting_hole_spacing) / 2]) {
+            translate([x, bracket_height / 2, -1])
+                cylinder(
+                    d = mounting_hole_diameter,
+                    h = bracket_depth + 2,
+                    $fn = 24
+                );
+        }
+        
+        // Center hole
+        translate([bracket_width / 2, bracket_height / 2, -1])
+            cylinder(
+                d = center_hole_diameter,
+                h = bracket_depth + 2,
+                $fn = 32
+            );
+    }
+}
+
+// Reinforcement ribs
+module reinforcement_ribs() {
+    rib_thickness = 1.5;
+    rib_height = bracket_depth * 0.8;
+    
+    for (angle = [30, 150, 210, 330]) {
+        rotate([0, 0, angle])
+            translate([bracket_width / 4, 0, bracket_thickness])
+                cube([rib_thickness, bracket_height / 6, rib_height], center = true);
+    }
+}
+
+// Chamfered edges
+module chamfered_edges() {
+    chamfer_positions = [
+        [0, 0],
+        [bracket_width, 0],
+        [bracket_width, bracket_height],
+        [0, bracket_height]
+    ];
+    
+    for (pos = chamfer_positions) {
+        translate([pos[0], pos[1], 0])
+            rotate([0, 0, atan2(pos[1], pos[0])])
+                linear_extrude(height = bracket_depth)
+                    polygon([[0, 0], [chamfer_size, 0], [0, chamfer_size]]);
+    }
+}
+
+// Assembly with colors
+color(bracket_color) {
+    difference() {
+        union() {
+            main_bracket();
+            reinforcement_ribs();
+        }
+        chamfered_edges();
+    }
+}
+
+// Highlight mounting holes
+color(highlight_color) {
+    for (x = [(bracket_width - mounting_hole_spacing) / 2,
+              (bracket_width + mounting_hole_spacing) / 2]) {
+        translate([x, bracket_height / 2, -0.5])
+            cylinder(
+                d = mounting_hole_diameter + 0.2,
+                h = 1,
+                $fn = 24
+            );
+    }
+}
+
+// Technical annotations (comments for documentation)
+/*
+ * Design Notes:
+ * - All dimensions are in millimeters
+ * - Material: Aluminum 6061-T6
+ * - Finish: Anodized clear
+ * - Tolerances: ±0.1mm unless noted
+ * 
+ * Manufacturing:
+ * - CNC machining recommended
+ * - Deburr all edges
+ * - Tap mounting holes M6x1.0
+ */
