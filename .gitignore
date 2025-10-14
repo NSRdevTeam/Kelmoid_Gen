@@ -1,0 +1,10 @@
+# Ignore OS artifacts
+.DS_Store
+Thumbs.db
+
+# Python caches (safe generic ignore)
+__pycache__/
+*.py[cod]
+
+# Node (if present)
+node_modules/
