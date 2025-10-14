@@ -1,0 +1,52 @@
+{
+  "generated_at": "2025-10-08T16:14:55.421020",
+  "total_examples": 5000,
+  "splits": {
+    "train": {
+      "total_examples": 4000,
+      "categories": {
+        "manufacturing": 1220,
+        "basic_geometry": 1588,
+        "validation": 395,
+        "complex_assemblies": 797
+      },
+      "difficulties": {
+        "medium": 2134,
+        "easy": 556,
+        "hard": 1310
+      },
+      "geometry_types": {
+        "unknown": 2412,
+        "sphere": 249,
+        "cube": 292,
+        "cone": 278,
+        "cylinder": 219,
+        "torus": 295,
+        "pyramid": 255
+      }
+    },
+    "validation": {
+      "total_examples": 1000,
+      "categories": {
+        "validation": 105,
+        "manufacturing": 280,
+        "basic_geometry": 412,
+        "complex_assemblies": 203
+      },
+      "difficulties": {
+        "medium": 523,
+        "easy": 140,
+        "hard": 337
+      },
+      "geometry_types": {
+        "unknown": 588,
+        "cube": 78,
+        "pyramid": 68,
+        "torus": 65,
+        "sphere": 69,
+        "cylinder": 63,
+        "cone": 69
+      }
+    }
+  }
+}

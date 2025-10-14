@@ -1,0 +1,58 @@
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+.venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment variables (IMPORTANT: Keep API keys secure!)
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+
+# Cache directories
+cache/
+temp/
+output/
+
+# Temporary files
+*.tmp
+*.temp
+
+# Gradio cache
+.gradio/
+flagged/
+
+# Fine-tuning outputs (optional - you may want to track these)
+# Uncomment the lines below if you want to exclude fine-tuning outputs
+# fine_tuning_outputs/
+# model_checkpoints/
+# *.pt
+# *.pth
+
+# Large model files
+*.bin
+*.safetensors
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
