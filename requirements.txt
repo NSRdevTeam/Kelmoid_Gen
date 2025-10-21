@@ -14,3 +14,6 @@ scipy
 requests
 beautifulsoup4
 manifold3d
+fastapi
+a2wsgi
+uvicorn
