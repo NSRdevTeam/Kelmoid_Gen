@@ -1,26 +1,20 @@
-# kelmoidAI_Genesis_llm
+<div align="center">
+<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+</div>
 
-This monorepo unifies two projects while preserving their Git histories:
-- AdvancedCAD
-- MECH_MIND
+# Run and deploy your AI Studio app
 
-Merge strategy: git subtree with per-project prefixes under the repository root.
+This contains everything you need to run your app locally.
 
-Imported structure:
-- MECH_MIND/ (imported)
-- AdvancedCAD/ (imported from local snapshot; history not preserved)
+View your app in AI Studio: https://ai.studio/apps/drive/1gIv0fOTAhWXotJeuX-RtXrAcVHKhPe_n
 
-Setup (Windows PowerShell):
-- python -m venv venv
-- venv\Scripts\Activate
-- pip install -r requirements.txt
+## Run Locally
 
-Run the Gradio app:
-- python MECH_MIND/app.py
+**Prerequisites:**  Node.js
 
-Generate a CAD demo (exports to outputs/demo_model.stl):
-- python scripts/generate_cad_demo.py
 
-Note on Git history:
-- AdvancedCAD was added from the local workspace. If you want to preserve its Git history in this monorepo, provide the remote URL/branch and we can re-import using:
-  git subtree add --prefix=AdvancedCAD <remote> <branch>
+1. Install dependencies:
+   `npm install`
+2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+3. Run the app:
+   `npm run dev`

@@ -1,24 +1,24 @@
-# Ignore OS artifacts
-.DS_Store
-Thumbs.db
-
-# Python caches (safe generic ignore)
-__pycache__/
-*.py[cod]
-
-# Virtual environments
-venv/
-.env
-.env.*
-
-# App outputs and logs
-outputs/
-logs/
+# Logs
+logs
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
-# Gradio caches
-.gradio/
-MECH_MIND/.gradio/
+node_modules
+dist
+dist-ssr
+*.local
 
-# Node (if present)
-node_modules/
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
