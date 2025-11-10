@@ -4,6 +4,8 @@ import { GoogleGenAI } from '@google/genai';
 import * as THREE from 'three';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { PromptOptimizationLayer, type OptimizedPrompt } from './src/prompt-optimizer';
+import { GPUCFDSolver, type CFDConfig, type SimulationResult } from './src/cfd-simulator';
 
 const systemPrompt = `
 System Role:
@@ -112,7 +114,6 @@ const PromptHelperModal = ({ isOpen, onClose }) => {
 
   const handleCopy = (text) => {
     navigator.clipboard.writeText(text).then(() => {
-      // Maybe show a small "Copied!" message in the future
     }).catch(err => console.error('Failed to copy text: ', err));
   };
 
@@ -126,34 +127,6 @@ const PromptHelperModal = ({ isOpen, onClose }) => {
     materialStructural: "Material: Structural Steel. Young's Modulus: 200 GPa, Poisson's Ratio: 0.3, Density: 7850 kg/m^3.",
     materialThermal: "Material: Aluminum for a heatsink. Thermal Conductivity: 205 W/mK, Density: 2700 kg/m^3, Specific Heat: 900 J/kg·K.",
     fourDParams: 'rotation on Y-axis, 720 degrees over 10 seconds, ease-in-out timing',
-    fourDCombined: 'A gear rotates 720 degrees on its Z-axis while simultaneously scaling up to 150% of its original size over 8 seconds.',
-    fourDSequential: 'First, a robotic arm extends 50mm along the X-axis over 2 seconds. Then, its claw rotates 90 degrees clockwise over 1 second.',
-    fourDBending: 'A flat metal sheet (100x100x2mm) is bent 90 degrees along its central X-axis to create an L-shape over 1.5 seconds.',
-    fourDTwisting: 'A square bar (10x10x100mm) is twisted 180 degrees along its longest axis (the Z-axis) over 3 seconds. The base of the bar at Z=0 remains fixed.',
-    cfd: 'Simulate airflow over a cylinder with a diameter of 0.1m. The fluid is air (density 1.225 kg/m^3, viscosity 1.81e-5 Pa.s). The inlet velocity is 10 m/s from the left, and the outlet is at atmospheric pressure on the right. The top and bottom walls are slip walls.',
-    cfdWater: 'Simulate water flowing through a pipe with a 90-degree bend. Pipe diameter is 5cm. Fluid is water at 20C (density 998.2 kg/m^3, viscosity 1.002e-3 Pa.s). Inlet velocity is 1.5 m/s. Outlet is pressure-based.',
-    cfdMultiphase: 'Simulate a 2D water droplet (diameter 1cm) falling under gravity into a pool of still air. The domain is 10cm wide by 15cm high. The bottom 5cm is water, the rest is air. Use a VOF (Volume of Fluid) multiphase model to track the interface.',
-    cfdMultiphaseDropletImpact: 'Simulate a 5mm water droplet impacting a dry surface at 2 m/s. Track the splashing and spreading of the droplet using a Volume of Fluid (VOF) model.',
-    cfdMultiphaseBubbleColumn: 'Model a bubble column where air is injected from the bottom of a water tank at 0.1 m/s through a 1cm orifice. Observe bubble rise and coalescence using a VOF multiphase model.',
-    cfdHeatTransfer: 'Simulate conjugate heat transfer for an aluminum heatsink in a channel. The heatsink base is at a constant 373K (100C). Air at 298K (25C) flows into the channel at 2 m/s. Include heat conduction within the solid heatsink and convection to the surrounding air.',
-    cfdTurbulenceKEpsilon: 'Turbulence Model: Standard k-epsilon, a robust model for general industrial flows.',
-    cfdTurbulenceKOmega: 'Turbulence Model: k-omega SST, suitable for aerodynamic flows with boundary layer separation.',
-    cfdWallFunction: 'Wall Treatment: Apply standard wall functions on the airfoil surface.',
-    cfdInletProfileTurbulent: 'Inlet Velocity Profile: A fully developed turbulent profile following the 1/7th power law.',
-    cfdInletProfileFormula: 'Inlet Velocity Profile: Parabolic, with max velocity of 2 m/s at the center, via U(y) = 2 * (1 - (y/0.05)^2), where y is distance from centerline.',
-    cfdInletProfileAngled: 'Inlet Velocity: 10 m/s at a 30-degree angle upwards from the main X-axis. Vector: (8.66, 5.0, 0) m/s.',
-    cfdInletProfileSwirl: 'Inlet Condition: A swirling flow with a constant axial velocity of 5 m/s and tangential velocity varying linearly from 0 at the center to 2 m/s at the pipe wall (radius = 0.1m).',
-    cfdMeshGlobal: 'Use a global cell size of 0.01m for the entire domain.',
-    cfdMeshFine: 'Use a fine mesh, especially around the cylinder, to capture the wake accurately.',
-    cfdMeshBoundaryLayer: 'Apply boundary layer refinement with 5 inflation layers and a growth rate of 1.2 on all no-slip walls.',
-    cfdBoundaryInletUniform: 'Boundary Condition: Inlet with a uniform velocity of 10 m/s on the left face.',
-    cfdBoundaryInletParabolic: 'Boundary Condition: Inlet with a parabolic velocity profile, max speed of 5 m/s on the left face.',
-    cfdBoundaryOutletZeroGradient: 'Boundary Condition: The outlet on the right face is a free outlet (zero-gradient) for all flow variables.',
-    cfdBoundaryOutletFarField: 'Simulate external airflow over a sports car at 60 m/s. The car surfaces are no-slip walls. All far-field boundaries, including the outlet, should be set as a pressure_far_field with 0 Pa gauge pressure.',
-    cfdBoundaryWallNoSlip: 'Boundary Condition: The surface of the cylinder is a no-slip wall, where the fluid velocity is zero.',
-    cfdBoundaryWallSlip: 'Boundary Condition: The top and bottom domain boundaries are slip walls, simulating an infinitely large domain.',
-    cfdBoundarySymmetry: 'Boundary Condition: The top face is a symmetry plane to reduce computational cost.',
-    cfdBoundaryPeriodic: 'Boundary Condition: The left and right faces are periodic, simulating flow over an infinite array of cylinders.',
   };
 
   return (
@@ -174,278 +147,6 @@ const PromptHelperModal = ({ isOpen, onClose }) => {
               <button className="copy-button" onClick={() => handleCopy(examples.dimensions)}>Copy</button>
             </div>
           </div>
-
-          <div className="help-section">
-            <h3>Specifying Export Formats</h3>
-            <p>You can request a specific file format using the dropdown menu or by stating it in your prompt. The AI will generate a script or data structure suitable for that format.</p>
-            <ul>
-                <li><strong>Common CAD Formats:</strong> OpenSCAD, STEP, STL, OBJ</li>
-                <li><strong>Conceptual CFD Formats:</strong> OpenFOAM_mesh, Fluent_mesh, VTK</li>
-            </ul>
-            <div className="example">
-                <code>{examples.exportFormatExample}</code>
-                <button className="copy-button" onClick={() => handleCopy(examples.exportFormatExample)}>Copy</button>
-            </div>
-          </div>
-
-          <div className="help-section">
-            <h3>Specifying Material Properties</h3>
-            <p>Define the material for your model. This is crucial for simulations (CFD/FEA) but also useful for specifying the type of material for a CAD model.</p>
-            
-            <h5>For Simple CAD Models</h5>
-            <p>Just stating the material name is often enough.</p>
-            <div className="example">
-              <code>{examples.materialSimple}</code>
-              <button className="copy-button" onClick={() => handleCopy(examples.materialSimple)}>Copy</button>
-            </div>
-
-            <h5>For Simulation (CFD / FEA)</h5>
-            <p>Provide specific physical properties needed for the analysis. You can use the structured inputs for this.</p>
-            <p><strong>Structural Analysis Example:</strong></p>
-            <div className="example">
-              <code>{examples.materialStructural}</code>
-              <button className="copy-button" onClick={() => handleCopy(examples.materialStructural)}>Copy</button>
-            </div>
-
-            <p><strong>Thermal Analysis Example:</strong></p>
-            <div className="example">
-              <code>{examples.materialThermal}</code>
-              <button className="copy-button" onClick={() => handleCopy(examples.materialThermal)}>Copy</button>
-            </div>
-          </div>
-          
-          <div className="help-section">
-            <h3>Mechanical Domain</h3>
-            <p>Use keywords like <strong>gear, bearing, piston, shaft, bracket, enclosure, threads (e.g., M5), tolerance, assembly</strong>.</p>
-            <div className="example">
-              <code>{examples.mechanical}</code>
-              <button className="copy-button" onClick={() => handleCopy(examples.mechanical)}>Copy</button>
-            </div>
-          </div>
-
-          <div className="help-section">
-            <h3>Architectural Domain</h3>
-            <p>Use keywords like <strong>building, facade, floor plan, beam, column, truss, window, door, roof type (e.g., gable, flat)</strong>.</p>
-            <div className="example">
-              <code>{examples.architectural}</code>
-              <button className="copy-button" onClick={() => handleCopy(examples.architectural)}>Copy</button>
-            </div>
-          </div>
-
-          <div className="help-section">
-            <h3>CFD Simulation</h3>
-            <p>Describe the fluid, flow conditions, and boundaries. Use keywords like <strong>inlet, outlet, wall, velocity, pressure, density, viscosity, laminar, turbulent</strong>.</p>
-            <div className="example">
-              <code>{examples.cfd}</code>
-              <button className="copy-button" onClick={() => handleCopy(examples.cfd)}>Copy</button>
-            </div>
-
-            <h4>Fluid Properties</h4>
-            <p>Specify the fluid being simulated. For common fluids, you can state the name and temperature. For others, provide density and viscosity.</p>
-            <div className="example">
-              <code>{examples.cfdWater}</code>
-              <button className="copy-button" onClick={() => handleCopy(examples.cfdWater)}>Copy</button>
-            </div>
-            
-            <h4>Multiphase Flow</h4>
-            <p>
-              Simulate systems with two or more distinct fluids, like water and air. These models are essential for analyzing phenomena such as droplet formation, bubble dynamics, and liquid-air interfaces. The <strong>Volume of Fluid (VOF)</strong> model is a common and effective method for tracking the interface between the fluids.
-            </p>
-            <p><strong>Droplet Falling in Air (Liquid-Air Interface):</strong> A classic example to model interface tracking and gravity effects.</p>
-            <div className="example">
-              <code>{examples.cfdMultiphase}</code>
-              <button className="copy-button" onClick={() => handleCopy(examples.cfdMultiphase)}>Copy</button>
-            </div>
-            <p><strong>Droplet Impact:</strong> Useful for analyzing spray cooling, inkjet printing, or surface coating processes.</p>
-            <div className="example">
-              <code>{examples.cfdMultiphaseDropletImpact}</code>
-              <button className="copy-button" onClick={() => handleCopy(examples.cfdMultiphaseDropletImpact)}>Copy</button>
-            </div>
-            <p><strong>Bubble Column:</strong> Common in chemical reactors and aeration systems to study bubble dynamics.</p>
-            <div className="example">
-              <code>{examples.cfdMultiphaseBubbleColumn}</code>
-              <button className="copy-button" onClick={() => handleCopy(examples.cfdMultiphaseBubbleColumn)}>Copy</button>
-            </div>
-
-            <h4>Heat Transfer</h4>
-            <p>Include temperatures for fluids and surfaces. For conjugate heat transfer (CHT), specify solid materials and their thermal properties.</p>
-            <div className="example">
-              <code>{examples.cfdHeatTransfer}</code>
-              <button className="copy-button" onClick={() => handleCopy(examples.cfdHeatTransfer)}>Copy</button>
-            </div>
-
-            <h4>Advanced CFD Parameters</h4>
-            <p>For more complex simulations, you can specify turbulence models, wall treatments, and custom boundary profiles to achieve higher fidelity results.</p>
-            
-            <h5>Turbulence Models</h5>
-            <p>Required for non-laminar (turbulent) flows. The choice of model impacts accuracy and computational cost.</p>
-            <div className="example">
-              <code>{examples.cfdTurbulenceKOmega}</code>
-              <button className="copy-button" onClick={() => handleCopy(examples.cfdTurbulenceKOmega)}>Copy</button>
-            </div>
-            <div className="example">
-              <code>{examples.cfdTurbulenceKEpsilon}</code>
-              <button className="copy-button" onClick={() => handleCopy(examples.cfdTurbulenceKEpsilon)}>Copy</button>
-            </div>
-
-            <h5>Wall Functions</h5>
-            <p>Define how the flow is modeled near solid surfaces in turbulent simulations. This is crucial for accurately capturing boundary layer effects.</p>
-            <div className="example">
-              <code>{examples.cfdWallFunction}</code>
-              <button className="copy-button" onClick={() => handleCopy(examples.cfdWallFunction)}>Copy</button>
-            </div>
-
-            <h5>Custom Inlet Profiles</h5>
-            <p>Instead of a uniform value, you can define a velocity or temperature profile across an inlet to better represent real-world conditions. This allows for more realistic simulations of phenomena like fully developed pipe flow, angled jets, or swirling vortices.</p>
-
-            <p><strong>Using a Formula:</strong> Define the profile using a mathematical expression for precise control.</p>
-            <div className="example">
-              <code>{examples.cfdInletProfileFormula}</code>
-              <button className="copy-button" onClick={() => handleCopy(examples.cfdInletProfileFormula)}>Copy</button>
-            </div>
-            
-            <p><strong>Angled Flow:</strong> Specify the velocity direction using an angle or a vector for non-axial flow.</p>
-            <div className="example">
-              <code>{examples.cfdInletProfileAngled}</code>
-              <button className="copy-button" onClick={() => handleCopy(examples.cfdInletProfileAngled)}>Copy</button>
-            </div>
-
-            <p><strong>Descriptive Swirl:</strong> Describe complex rotational flow patterns for things like cyclones or vortex tubes.</p>
-            <div className="example">
-              <code>{examples.cfdInletProfileSwirl}</code>
-              <button className="copy-button" onClick={() => handleCopy(examples.cfdInletProfileSwirl)}>Copy</button>
-            </div>
-            
-            <p><strong>Turbulent Profile:</strong> For turbulent flows, you can specify common engineering profiles like the power law.</p>
-            <div className="example">
-              <code>{examples.cfdInletProfileTurbulent}</code>
-              <button className="copy-button" onClick={() => handleCopy(examples.cfdInletProfileTurbulent)}>Copy</button>
-            </div>
-            
-            <h4>Mesh Properties (Optional)</h4>
-            <p>Control the resolution of your simulation grid. A finer mesh gives more accurate results but requires more computation. You can specify global settings or local refinements.</p>
-            
-            <p><strong>Global Cell Size:</strong> Sets a uniform size for mesh cells everywhere. Good for simple geometries.</p>
-            <div className="example">
-              <code>{examples.cfdMeshGlobal}</code>
-              <button className="copy-button" onClick={() => handleCopy(examples.cfdMeshGlobal)}>Copy</button>
-            </div>
-
-            <p><strong>Qualitative Refinement:</strong> Ask for a finer mesh in critical areas without specifying exact numbers.</p>
-            <div className="example">
-              <code>{examples.cfdMeshFine}</code>
-              <button className="copy-button" onClick={() => handleCopy(examples.cfdMeshFine)}>Copy</button>
-            </div>
-
-            <p><strong>Boundary Layer Refinement:</strong> Crucial for accurately modeling flow near walls (e.g., on an airfoil or car body).</p>
-            <div className="example">
-              <code>{examples.cfdMeshBoundaryLayer}</code>
-              <button className="copy-button" onClick={() => handleCopy(examples.cfdMeshBoundaryLayer)}>Copy</button>
-            </div>
-
-
-            <h4>Boundary Conditions</h4>
-            <p>Clearly define how the fluid interacts with the boundaries of your domain. Being explicit is key.</p>
-            
-            <h5>Inlet Conditions (Where fluid enters)</h5>
-            <p><strong>Uniform:</strong> The simplest inlet, where velocity is constant across the entire face. Good for general cases.</p>
-            <div className="example">
-              <code>{examples.cfdBoundaryInletUniform}</code>
-              <button className="copy-button" onClick={() => handleCopy(examples.cfdBoundaryInletUniform)}>Copy</button>
-            </div>
-            <p><strong>Parabolic:</strong> Simulates a fully developed flow profile, common in pipes or channels.</p>
-            <div className="example">
-              <code>{examples.cfdBoundaryInletParabolic}</code>
-              <button className="copy-button" onClick={() => handleCopy(examples.cfdBoundaryInletParabolic)}>Copy</button>
-            </div>
-
-            <h5>Outlet Conditions (Where fluid exits)</h5>
-            <p><strong>Zero-Gradient / Free Outlet:</strong> A simple outlet that assumes the flow properties are no longer changing. It lets the flow exit naturally without imposing a fixed pressure. Best for internal flows where the outlet is far from disturbances.</p>
-            <div className="example">
-              <code>{examples.cfdBoundaryOutletZeroGradient}</code>
-              <button className="copy-button" onClick={() => handleCopy(examples.cfdBoundaryOutletZeroGradient)}>Copy</button>
-            </div>
-            <p><strong>Pressure Far-Field:</strong> Ideal for external aerodynamic simulations (e.g., airflow over a car, airplane wing, or a building). This condition is applied to boundaries of the simulation domain that are far away from the object, representing the undisturbed atmospheric pressure of the open air.</p>
-            <div className="example">
-              <code>{examples.cfdBoundaryOutletFarField}</code>
-              <button className="copy-button" onClick={() => handleCopy(examples.cfdBoundaryOutletFarField)}>Copy</button>
-            </div>
-
-            <h5>Wall Conditions (Solid surfaces)</h5>
-            <p><strong>No-Slip:</strong> The default for most physical walls. The fluid velocity at the wall surface is zero.</p>
-            <div className="example">
-              <code>{examples.cfdBoundaryWallNoSlip}</code>
-              <button className="copy-button" onClick={() => handleCopy(examples.cfdBoundaryWallNoSlip)}>Copy</button>
-            </div>
-            <p><strong>Slip:</strong> The fluid can flow along the wall without friction. Often used for far-field boundaries or symmetry planes.</p>
-            <div className="example">
-              <code>{examples.cfdBoundaryWallSlip}</code>
-              <button className="copy-button" onClick={() => handleCopy(examples.cfdBoundaryWallSlip)}>Copy</button>
-            </div>
-
-            <h5>Other Conditions</h5>
-            <p><strong>Symmetry:</strong> Used to model only a fraction of a symmetric problem, saving computational resources.</p>
-            <div className="example">
-              <code>{examples.cfdBoundarySymmetry}</code>
-              <button className="copy-button" onClick={() => handleCopy(examples.cfdBoundarySymmetry)}>Copy</button>
-            </div>
-            <p><strong>Periodic:</strong> What exits one boundary enters the opposite one, useful for repeating patterns (e.g., heat exchanger fins, turbine blades).</p>
-             <div className="example">
-              <code>{examples.cfdBoundaryPeriodic}</code>
-              <button className="copy-button" onClick={() => handleCopy(examples.cfdBoundaryPeriodic)}>Copy</button>
-            </div>
-          </div>
-
-          <div className="help-section">
-            <h3>4D / Animation Parameters</h3>
-            <p>Use the dedicated input field for animations. Clearly describe the transformation, axis, magnitude, and duration. Be as descriptive as possible.</p>
-            
-            <h4>Basic Transformations</h4>
-            <ul>
-              <li><strong>Rotation:</strong> 'rotation on Z-axis, 360 degrees over 5 seconds'</li>
-              <li><strong>Scaling:</strong> 'scale from 1x to 1.5x on all axes over 2 seconds'</li>
-              <li><strong>Translation:</strong> 'move 100mm along the X-axis over 4 seconds'</li>
-            </ul>
-
-            <h4>Animation Timing (Interpolation)</h4>
-            <p>You can control the timing of the animation using the "Interpolation" dropdown or by describing it in the prompt (e.g., "with ease-in-out timing").</p>
-            <ul>
-              <li><strong>Linear:</strong> Constant speed.</li>
-              <li><strong>Ease-In-Out:</strong> Starts slow, speeds up, then ends slow.</li>
-              <li><strong>Ease-In:</strong> Starts slow and accelerates.</li>
-              <li><strong>Ease-Out:</strong> Starts fast and decelerates.</li>
-            </ul>
-
-
-            <h4>Advanced Examples</h4>
-            <p><strong>Combined Animations:</strong> Describe multiple transformations happening at the same time.</p>
-            <div className="example">
-              <code>{examples.fourDCombined}</code>
-              <button className="copy-button" onClick={() => handleCopy(examples.fourDCombined)}>Copy</button>
-            </div>
-
-            <p><strong>Sequential Animations:</strong> Use words like "first," "then," and "after that" to define a sequence of events.</p>
-             <div className="example">
-              <code>{examples.fourDSequential}</code>
-              <button className="copy-button" onClick={() => handleCopy(examples.fourDSequential)}>Copy</button>
-            </div>
-
-            <h5>Complex Deformations (Bending & Twisting)</h5>
-            <p>For non-rigid transformations, be explicit about the axis or plane of deformation. Specify the angle of the bend or twist and over what duration it should occur. Mentioning fixed points can help define the transformation more clearly.</p>
-
-            <p><strong>Bending Example:</strong></p>
-            <div className="example">
-                <code>{examples.fourDBending}</code>
-                <button className="copy-button" onClick={() => handleCopy(examples.fourDBending)}>Copy</button>
-            </div>
-
-            <p><strong>Twisting Example:</strong></p>
-            <div className="example">
-                <code>{examples.fourDTwisting}</code>
-                <button className="copy-button" onClick={() => handleCopy(examples.fourDTwisting)}>Copy</button>
-            </div>
-          </div>
-
         </div>
       </div>
     </div>
@@ -508,7 +209,6 @@ const unitPatterns = [
     { name: 'mm', regex: new RegExp(`\\b(\\d*\\.?\\d+)\\s*(?:millimeter|millimeters|mm)`, 'gi') },
 ];
 
-
 const convertUnits = (prompt, targetSystem) => {
     let convertedPrompt = prompt;
     let highlightedPrompt = prompt;
@@ -519,7 +219,6 @@ const convertUnits = (prompt, targetSystem) => {
     unitPatterns.forEach(({ name, regex }) => {
         regex.lastIndex = 0;
         let match;
-        // Always match against the original, unmodified prompt for consistency.
         while ((match = regex.exec(prompt)) !== null) {
             const originalMatch = match[0];
             const value = parseFloat(match[1]);
@@ -531,7 +230,7 @@ const convertUnits = (prompt, targetSystem) => {
                 else if (name === 'm') convertedValue = value * CONVERSION_FACTORS.m_to_mm;
                 else if (name === 'cm') convertedValue = value * CONVERSION_FACTORS.cm_to_mm;
                 else continue;
-            } else { // Imperial
+            } else {
                 if (name === 'mm') convertedValue = value * CONVERSION_FACTORS.mm_to_in;
                 else if (name === 'cm') convertedValue = value * CONVERSION_FACTORS.cm_to_in;
                 else if (name === 'm') convertedValue = value * CONVERSION_FACTORS.m_to_in;
@@ -546,23 +245,17 @@ const convertUnits = (prompt, targetSystem) => {
         }
     });
     
-    // Function to escape special characters for use in a RegExp
     const escapeRegExp = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-    // Perform the replacements after finding all matches to avoid conflicts
     logEntries.forEach(logEntry => {
         const [original, replacement] = logEntry.split(' -> ');
-        const originalText = original.slice(1,-1); // remove quotes
+        const originalText = original.slice(1,-1);
         const replacementText = replacement.slice(1,-1);
         
-        // Use a case-insensitive, global regex for replacement. This is more robust
-        // than the previous implementation as it handles special characters.
         const searchRegex = new RegExp(escapeRegExp(originalText), 'gi');
         
-        // Replace in the plain text version for the AI
         convertedPrompt = convertedPrompt.replace(searchRegex, replacementText);
         
-        // Replace in the HTML version for the UI preview
         const highlightedReplacement = `<span class="unit-highlight" title="Original: ${originalText}">${replacementText}</span>`;
         highlightedPrompt = highlightedPrompt.replace(searchRegex, highlightedReplacement);
     });
@@ -596,7 +289,6 @@ const ModelViewer = ({ stlData, animationData }) => {
         const currentMount = mountRef.current;
         let animationFrameId;
 
-        // Scene, Camera, Renderer
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x18181b);
         const camera = new THREE.PerspectiveCamera(75, currentMount.clientWidth / currentMount.clientHeight, 0.1, 1000);
@@ -605,11 +297,9 @@ const ModelViewer = ({ stlData, animationData }) => {
         renderer.setSize(currentMount.clientWidth, currentMount.clientHeight);
         currentMount.appendChild(renderer.domElement);
 
-        // Controls
         const controls = new OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
 
-        // Lighting
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
         scene.add(ambientLight);
         const pointLight1 = new THREE.PointLight(0xffffff, 0.8);
@@ -619,7 +309,6 @@ const ModelViewer = ({ stlData, animationData }) => {
         pointLight2.position.set(-100, -100, -100);
         scene.add(pointLight2);
 
-        // Load STL
         const loader = new STLLoader();
         const geometry = loader.parse(stlData);
         const material = new THREE.MeshStandardMaterial({
@@ -627,7 +316,6 @@ const ModelViewer = ({ stlData, animationData }) => {
         });
         const mesh = new THREE.Mesh(geometry, material);
         
-        // Center and scale model
         const box = new THREE.Box3().setFromObject(mesh);
         const center = box.getCenter(new THREE.Vector3());
         mesh.position.sub(center);
@@ -638,14 +326,12 @@ const ModelViewer = ({ stlData, animationData }) => {
         scene.add(mesh);
         camera.lookAt(mesh.position);
         
-        // Store initial state for animation reset
         animationState.current.initial = {
             position: mesh.position.clone(),
             rotation: mesh.rotation.clone(),
             scale: mesh.scale.clone()
         };
 
-        // Handle resize
         const handleResize = () => {
             if (currentMount) {
                 camera.aspect = currentMount.clientWidth / currentMount.clientHeight;
@@ -655,7 +341,6 @@ const ModelViewer = ({ stlData, animationData }) => {
         };
         window.addEventListener('resize', handleResize);
 
-        // Animation loop
         const animate = () => {
             animationFrameId = requestAnimationFrame(animate);
 
@@ -668,7 +353,6 @@ const ModelViewer = ({ stlData, animationData }) => {
                     progress = 1;
                     animationState.current.isPlaying = false;
                     animationState.current.clock.stop();
-                    // Optional: reset to end state explicitly
                 }
 
                 const easingFunction = EasingFunctions[animationData.interpolation_type] || EasingFunctions.linear;
@@ -683,13 +367,10 @@ const ModelViewer = ({ stlData, animationData }) => {
                     if (axis === 'y') mesh.rotation.y = animationState.current.initial.rotation.y + angle;
                     if (axis === 'z') mesh.rotation.z = animationState.current.initial.rotation.z + angle;
                 }
-                
-                // Add other animation types (scaling, translation) here...
 
                 if (!animationState.current.isPlaying) {
-                    // Reset to initial state after a delay to allow viewing the final state
                     setTimeout(() => {
-                        if (mesh) { // check if mesh still exists
+                        if (mesh) {
                            mesh.position.copy(animationState.current.initial.position);
                            mesh.rotation.copy(animationState.current.initial.rotation);
                            mesh.scale.copy(animationState.current.initial.scale);
@@ -702,7 +383,6 @@ const ModelViewer = ({ stlData, animationData }) => {
         };
         animate();
 
-        // Cleanup
         return () => {
             cancelAnimationFrame(animationFrameId);
             window.removeEventListener('resize', handleResize);
@@ -773,7 +453,14 @@ const App = () => {
   const [unitConversionLog, setUnitConversionLog] = useState('');
   const [convertedPromptPreview, setConvertedPromptPreview] = useState<string | null>(null);
 
-  // Load state from localStorage on initial render
+  const [optimizedPromptData, setOptimizedPromptData] = useState<OptimizedPrompt | null>(null);
+  const [cfdResults, setCfdResults] = useState<SimulationResult | null>(null);
+  const [isOptimizing, setIsOptimizing] = useState(false);
+  const [showOptimizationPanel, setShowOptimizationPanel] = useState(false);
+
+  const promptOptimizerRef = useRef(new PromptOptimizationLayer());
+  const cfdSolverRef = useRef(new GPUCFDSolver());
+
   useEffect(() => {
     try {
       const savedHistory = localStorage.getItem('promptHistory');
@@ -797,7 +484,6 @@ const App = () => {
     } catch (error) { console.error("Could not load prompt state", error); }
   }, []);
 
-  // Save state to localStorage whenever it changes
   useEffect(() => {
     try {
         const currentState = {
@@ -807,7 +493,6 @@ const App = () => {
     } catch (error) { console.error("Could not save prompt state", error); }
   }, [prompt, materialParams, feaInputs, fourDParams, animationInterpolation, cfdInputs, exportFormat, aspectRatio, defaultUnitSystem]);
 
-  // Update unit conversion preview on prompt change
   useEffect(() => {
     const { highlightedPrompt, log } = convertUnits(prompt, defaultUnitSystem);
     if (log) {
@@ -843,11 +528,84 @@ const App = () => {
     }
   };
 
+  const handleOptimizePrompt = async () => {
+    if (!prompt.trim()) return;
+
+    setIsOptimizing(true);
+    setShowOptimizationPanel(true);
+
+    try {
+      const optimized = await promptOptimizerRef.current.optimizePrompt(prompt);
+      setOptimizedPromptData(optimized);
+
+      console.log('🎯 Design Intent Extracted:', optimized.designIntent);
+      console.log('🧠 AI Reasoning:', optimized.reasoning);
+      console.log('✨ Optimized Prompt:', optimized.optimized);
+
+    } catch (error) {
+      console.error('Prompt optimization error:', error);
+      setError(`Optimization failed: ${error.message}`);
+    } finally {
+      setIsOptimizing(false);
+    }
+  };
+
+  const runCFDSimulation = async () => {
+    console.log('🌊 Starting GPU-accelerated CFD simulation...');
+    setLoadingStatus('Running CFD simulation...');
+
+    const cfdConfig: CFDConfig = {
+      gridSize: { x: 30, y: 30, z: 30 },
+      fluidProperties: {
+        density: parseFloat(cfdInputs.density),
+        viscosity: parseFloat(cfdInputs.viscosity),
+      },
+      boundaryConditions: [
+        {
+          type: 'velocity',
+          location: 'inlet',
+          value: { 
+            x: cfdInputs.inletDirection === 'X' ? parseFloat(cfdInputs.inletValue) : 0,
+            y: cfdInputs.inletDirection === 'Y' ? parseFloat(cfdInputs.inletValue) : 0,
+            z: cfdInputs.inletDirection === 'Z' ? parseFloat(cfdInputs.inletValue) : 0
+          },
+        },
+        {
+          type: 'pressure',
+          location: 'outlet',
+          value: parseFloat(cfdInputs.outletValue),
+        },
+        {
+          type: 'wall',
+          location: 'boundaries',
+          value: 0,
+        },
+      ],
+      timeStep: 0.01,
+      iterations: 50,
+    };
+
+    try {
+      const results = await cfdSolverRef.current.simulate(cfdConfig);
+      setCfdResults(results);
+
+      console.log(`✅ CFD completed in ${results.computeTime.toFixed(2)}ms`);
+      console.log(`📊 ${results.message}`);
+
+    } catch (error) {
+      console.error('CFD simulation error:', error);
+      setError(`CFD simulation failed: ${error.message}`);
+    }
+  };
+
   const handleGenerate = async () => {
     if (!prompt.trim()) {
       setError('Please enter a description for the CAD model.');
       return;
     }
+
+    const finalPrompt = optimizedPromptData?.optimized || prompt;
+
     setIsLoading(true);
     setError('');
     setOutput('');
@@ -855,11 +613,12 @@ const App = () => {
     setStlData('');
     setAnimationData(null);
     setUnitConversionLog('');
+    setCfdResults(null);
 
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
-      const { convertedPrompt, log } = convertUnits(prompt, defaultUnitSystem);
+      const { convertedPrompt, log } = convertUnits(finalPrompt, defaultUnitSystem);
       if (log) setUnitConversionLog(log);
       
       const buildMaterialString = () => {
@@ -869,7 +628,6 @@ const App = () => {
             if (feaInputs.youngsModulus) feaString += `Young's Modulus: ${feaInputs.youngsModulus} GPa. `;
             if (feaInputs.poissonsRatio) feaString += `Poisson's Ratio: ${feaInputs.poissonsRatio}. `;
             if (feaInputs.density) feaString += `Density: ${feaInputs.density} kg/m^3.`;
-            // Check if anything was actually added besides the label
             if (feaString.trim().length > 20) {
                 return feaString;
             }
@@ -944,6 +702,10 @@ ${buildCfdString()}
         return newHistory;
       });
 
+      if (cfdInputs.isCfdEnabled) {
+        await runCFDSimulation();
+      }
+
       setLoadingStatus('Generating photorealistic render...');
       const renderPrompt = `Create a high-quality, photorealistic render of the following object, described by this prompt: "${jsonOutput.description}". The object should be displayed in a clean, well-lit studio environment that highlights its form and materials. Aspect Ratio: ${aspectRatio}.`;
       
@@ -982,6 +744,9 @@ ${buildCfdString()}
     setError('');
     setUnitConversionLog('');
     setConvertedPromptPreview(null);
+    setOptimizedPromptData(null);
+    setCfdResults(null);
+    setShowOptimizationPanel(false);
   };
   
   const handleLoadFromHistory = (item) => {
@@ -1012,6 +777,142 @@ ${buildCfdString()}
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
+
+  const OptimizationPanel = () => {
+    if (!showOptimizationPanel || !optimizedPromptData) return null;
+
+    return (
+      <div className="card" style={{ marginTop: '2rem', border: '2px solid #ff8a00' }}>
+        <h3 style={{ color: '#ff8a00' }}>🎯 AI Design Intention Analysis</h3>
+        
+        <div style={{ marginTop: '1rem' }}>
+          <h4>Detected Design Intent:</h4>
+          <ul style={{ marginLeft: '1.5rem' }}>
+            <li>Primary Shape: <strong>{optimizedPromptData.designIntent.primaryShape}</strong></li>
+            <li>Confidence: <strong>{(optimizedPromptData.designIntent.confidence * 100).toFixed(0)}%</strong></li>
+            {optimizedPromptData.designIntent.dimensions.size > 0 && (
+              <li>
+                Dimensions: {Array.from(optimizedPromptData.designIntent.dimensions.entries()).map(
+                  ([key, val]) => `${key}: ${val}`
+                ).join(', ')}
+              </li>
+            )}
+            {optimizedPromptData.designIntent.features.length > 0 && (
+              <li>Features: {optimizedPromptData.designIntent.features.join(', ')}</li>
+            )}
+            {optimizedPromptData.designIntent.materialRequirements && (
+              <li>Material: {optimizedPromptData.designIntent.materialRequirements}</li>
+            )}
+            {optimizedPromptData.designIntent.manufacturing && (
+              <li>Manufacturing: {optimizedPromptData.designIntent.manufacturing}</li>
+            )}
+          </ul>
+        </div>
+
+        {optimizedPromptData.reasoning.length > 0 && (
+          <div style={{ marginTop: '1rem' }}>
+            <h4>🧠 AI Engineering Reasoning:</h4>
+            <ul style={{ marginLeft: '1.5rem' }}>
+              {optimizedPromptData.reasoning.map((reason, idx) => (
+                <li key={idx}>{reason}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <div style={{ marginTop: '1rem' }}>
+          <h4>✨ Optimized Prompt:</h4>
+          <div className="prompt-preview" style={{ backgroundColor: 'rgba(255, 138, 0, 0.1)' }}>
+            {optimizedPromptData.optimized}
+          </div>
+        </div>
+
+        {optimizedPromptData.suggestedImprovements.length > 0 && (
+          <div style={{ marginTop: '1rem' }}>
+            <h4>💡 Suggestions:</h4>
+            <ul style={{ marginLeft: '1.5rem' }}>
+              {optimizedPromptData.suggestedImprovements.map((suggestion, idx) => (
+                <li key={idx}>{suggestion}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <div className="button-group" style={{ marginTop: '1rem' }}>
+          <button 
+            className="clear-button"
+            onClick={() => setShowOptimizationPanel(false)}
+          >
+            Close
+          </button>
+          <button 
+            className="generate-button"
+            onClick={() => {
+              setPrompt(optimizedPromptData.optimized);
+              setShowOptimizationPanel(false);
+            }}
+          >
+            Use Optimized Prompt
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const CFDResultsPanel = () => {
+    if (!cfdResults) return null;
+
+    return (
+      <div className="card" style={{ marginTop: '2rem', border: '2px solid #00a8ff' }}>
+        <h3 style={{ color: '#00a8ff' }}>🌊 CFD Simulation Results</h3>
+        
+        <div style={{ marginTop: '1rem' }}>
+          <p><strong>Status:</strong> {cfdResults.success ? '✅ Completed' : '❌ Failed'}</p>
+          <p><strong>Message:</strong> {cfdResults.message}</p>
+          <p><strong>Computation Time:</strong> {cfdResults.computeTime.toFixed(2)} ms</p>
+          <p><strong>Iterations:</strong> {cfdResults.convergenceHistory.length}</p>
+          {cfdResults.convergenceHistory.length > 0 && (
+            <p><strong>Final Residual:</strong> {cfdResults.convergenceHistory[cfdResults.convergenceHistory.length - 1]?.toExponential(2)}</p>
+          )}
+        </div>
+
+        <div style={{ marginTop: '1rem' }}>
+          <h4>Convergence History:</h4>
+          <div style={{ 
+            height: '200px', 
+            border: '1px solid #3f3f46', 
+            borderRadius: '8px',
+            padding: '1rem',
+            backgroundColor: '#0c0a09',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            <p style={{ color: '#a1a1aa', textAlign: 'center' }}>
+              Simulation converged over {cfdResults.convergenceHistory.length} iterations<br/>
+              <small>Final residual: {cfdResults.convergenceHistory[cfdResults.convergenceHistory.length - 1]?.toExponential(3)}</small>
+            </p>
+          </div>
+        </div>
+
+        <div style={{ marginTop: '1rem' }}>
+          <h4>Velocity Field Data:</h4>
+          <p style={{ color: '#a1a1aa' }}>
+            Total velocity components: {cfdResults.velocityField.length}<br/>
+            Max velocity: {Math.max(...(Array.from(cfdResults.velocityField) as number[])).toFixed(3)} m/s
+          </p>
+        </div>
+
+        <div style={{ marginTop: '1rem' }}>
+          <h4>Pressure Field Data:</h4>
+          <p style={{ color: '#a1a1aa' }}>
+            Total pressure points: {cfdResults.pressureField.length}<br/>
+            Max pressure: {Math.max(...(Array.from(cfdResults.pressureField) as number[])).toFixed(3)} Pa
+          </p>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -1109,7 +1010,6 @@ ${buildCfdString()}
             )}
           </div>
 
-
           <div className="form-group">
             <label htmlFor="fourd-params-input">4D / Animation Parameters (Optional)</label>
             <textarea
@@ -1151,8 +1051,8 @@ ${buildCfdString()}
                             <input type="text" id="fluidName" name="fluidName" value={cfdInputs.fluidName} onChange={handleCfdInputChange} />
                         </div>
                         <div className="form-group">
-                            <label htmlFor="density">Density (kg/m³)</label>
-                            <input type="text" id="density" name="density" value={cfdInputs.density} onChange={handleCfdInputChange} />
+                            <label htmlFor="cfd-density">Density (kg/m³)</label>
+                            <input type="text" id="cfd-density" name="density" value={cfdInputs.density} onChange={handleCfdInputChange} />
                         </div>
                         <div className="form-group">
                             <label htmlFor="viscosity">Viscosity (Pa·s)</label>
@@ -1260,11 +1160,24 @@ ${buildCfdString()}
           </div>
           <div className="button-group">
               <button className="clear-button" onClick={handleClear} disabled={isLoading}>Clear</button>
+              <button 
+                className="generate-button" 
+                onClick={handleOptimizePrompt}
+                disabled={isOptimizing || !prompt.trim()}
+                style={{ 
+                  background: isOptimizing ? '#3f3f46' : 'linear-gradient(45deg, #9333ea, #e52e71)' 
+                }}
+              >
+                {isOptimizing ? 'Analyzing...' : '🎯 Optimize Prompt (AI)'}
+              </button>
               <button className="generate-button" onClick={handleGenerate} disabled={isLoading}>
                   {isLoading ? 'Generating...' : 'Generate Model'}
               </button>
           </div>
       </div>
+
+      <OptimizationPanel />
+      <CFDResultsPanel />
       
       {isLoading && (
         <div className="output-container">
