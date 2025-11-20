@@ -11,7 +11,16 @@ node_modules
 dist
 dist-ssr
 *.local
-release
+
+# Build artifacts
+release/
+*.exe
+*.asar
+*.7z
+*.zip
+
+# Nested git repos
+Kelmoid_Gen/
 
 # Editor directories and files
 .vscode/*

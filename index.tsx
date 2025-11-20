@@ -1,6 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
-import { GoogleGenAI } from '@google/genai';
+
+// Define the interface for the exposed Electron API
+interface ElectronAPI {
+  generateContent: (model: string, prompt: string) => Promise<any>;
+  generateImages: (model: string, prompt: string, config: any) => Promise<any>;
+}
+
+// Extend the Window interface to include the electron property
+declare global {
+  interface Window {
+    electron: ElectronAPI;
+  }
+}
 
 const systemPrompt = `
 System Role:
@@ -589,7 +601,7 @@ const App = () => {
     setUnitConversionLog('');
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
       
       const { convertedPrompt, log } = convertUnits(prompt, defaultUnitSystem);
       if (log) {
@@ -607,10 +619,10 @@ ${cfdParams.trim() ? `\nCFD Parameters: ${cfdParams}` : ''}
 
       // Step 1: Generate CAD Script
       setLoadingStatus('Generating CAD script...');
-      const scriptResponse = await ai.models.generateContent({
-        model: 'gemini-2.5-pro',
-        contents: `${systemPrompt}\n\nUser Prompt: ${fullPrompt}`,
-      });
+      const scriptResponse = await window.electron.generateContent(
+        'gemini-2.5-pro',
+        `${systemPrompt}\n\nUser Prompt: ${fullPrompt}`
+      );
 
       const text = scriptResponse.text;
       let jsonOutput;
@@ -635,15 +647,15 @@ ${cfdParams.trim() ? `\nCFD Parameters: ${cfdParams}` : ''}
         imagePrompt = `Photorealistic 3D CAD render of: ${convertedPrompt}. ${materialParams.trim() ? `Material: ${materialParams}.` : ''} ${fourDParams.trim() ? `Animation details: ${fourDParams}.` : ''} ${cfdParams.trim() ? `CFD simulation visualization: ${cfdParams}.` : ''} Professional studio lighting, detailed, high-resolution, on a neutral background.`;
       }
       
-      const imageResponse = await ai.models.generateImages({
-        model: 'imagen-4.0-generate-001',
-        prompt: imagePrompt,
-        config: {
+      const imageResponse = await window.electron.generateImages(
+        'imagen-4.0-generate-001',
+        imagePrompt,
+        {
           numberOfImages: 1,
           outputMimeType: 'image/png',
           aspectRatio: aspectRatio,
-        },
-      });
+        }
+      );
 
       const base64ImageBytes = imageResponse.generatedImages[0].image.imageBytes;
       const generatedImageUrl = `data:image/png;base64,${base64ImageBytes}`;

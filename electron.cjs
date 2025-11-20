@@ -1,5 +1,6 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
+const { GoogleGenAI } = require('@google/genai');
 
 let mainWindow;
 
@@ -10,6 +11,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      preload: path.join(__dirname, 'preload.cjs'),
     },
     icon: path.join(__dirname, 'icon.png') // Optional: add an icon file
   });
@@ -30,7 +32,38 @@ function createWindow() {
   });
 }
 
-app.on('ready', createWindow);
+app.on('ready', () => {
+  createWindow();
+
+  ipcMain.handle('generate-content', async (event, { model, prompt }) => {
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || process.env.API_KEY });
+      const response = await ai.models.generateContent({
+        model: model,
+        contents: prompt,
+      });
+      return response;
+    } catch (error) {
+      console.error('Error in generate-content:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('generate-images', async (event, { model, prompt, config }) => {
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || process.env.API_KEY });
+      const response = await ai.models.generateImages({
+        model: model,
+        prompt: prompt,
+        config: config,
+      });
+      return response;
+    } catch (error) {
+      console.error('Error in generate-images:', error);
+      throw error;
+    }
+  });
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
