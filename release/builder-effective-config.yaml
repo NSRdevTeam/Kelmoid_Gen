@@ -1,0 +1,20 @@
+directories:
+  output: release
+  buildResources: assets
+appId: com.kelmoidai.textocad
+productName: Text to CAD
+files:
+  - filter:
+      - dist/**/*
+      - electron.cjs
+      - package.json
+win:
+  target:
+    - nsis
+  icon: icon.ico
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+electronVersion: 39.1.1
