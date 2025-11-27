@@ -6,6 +6,7 @@ import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { PromptOptimizationLayer, type OptimizedPrompt } from './src/prompt-optimizer';
 import { GPUCFDSolver, type CFDConfig, type SimulationResult } from './src/cfd-simulator';
+import CFDVisualizationComponent from './CFDVisualizationComponent';
 
 const systemPrompt = `
 System Role:
@@ -861,60 +862,43 @@ ${buildCfdString()}
   };
 
   const CFDResultsPanel = () => {
-    if (!cfdResults) return null;
+  if (!cfdResults) return null;
 
-    return (
-      <div className="card" style={{ marginTop: '2rem', border: '2px solid #00a8ff' }}>
-        <h3 style={{ color: '#00a8ff' }}>🌊 CFD Simulation Results</h3>
-        
-        <div style={{ marginTop: '1rem' }}>
-          <p><strong>Status:</strong> {cfdResults.success ? '✅ Completed' : '❌ Failed'}</p>
-          <p><strong>Message:</strong> {cfdResults.message}</p>
-          <p><strong>Computation Time:</strong> {cfdResults.computeTime.toFixed(2)} ms</p>
-          <p><strong>Iterations:</strong> {cfdResults.convergenceHistory.length}</p>
-          {cfdResults.convergenceHistory.length > 0 && (
-            <p><strong>Final Residual:</strong> {cfdResults.convergenceHistory[cfdResults.convergenceHistory.length - 1]?.toExponential(2)}</p>
-          )}
-        </div>
-
-        <div style={{ marginTop: '1rem' }}>
-          <h4>Convergence History:</h4>
-          <div style={{ 
-            height: '200px', 
-            border: '1px solid #3f3f46', 
-            borderRadius: '8px',
-            padding: '1rem',
-            backgroundColor: '#0c0a09',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}>
-            <p style={{ color: '#a1a1aa', textAlign: 'center' }}>
-              Simulation converged over {cfdResults.convergenceHistory.length} iterations<br/>
-              <small>Final residual: {cfdResults.convergenceHistory[cfdResults.convergenceHistory.length - 1]?.toExponential(3)}</small>
-            </p>
-          </div>
-        </div>
-
-        <div style={{ marginTop: '1rem' }}>
-          <h4>Velocity Field Data:</h4>
-          <p style={{ color: '#a1a1aa' }}>
-            Total velocity components: {cfdResults.velocityField.length}<br/>
-            Max velocity: {Math.max(...(Array.from(cfdResults.velocityField) as number[])).toFixed(3)} m/s
-          </p>
-        </div>
-
-        <div style={{ marginTop: '1rem' }}>
-          <h4>Pressure Field Data:</h4>
-          <p style={{ color: '#a1a1aa' }}>
-            Total pressure points: {cfdResults.pressureField.length}<br/>
-            Max pressure: {Math.max(...(Array.from(cfdResults.pressureField) as number[])).toFixed(3)} Pa
-          </p>
-        </div>
+  return (
+    <div className="card" style={{ marginTop: '2rem', border: '2px solid #00a8ff' }}>
+      <h3 style={{ color: '#00a8ff' }}>🌊 CFD Simulation Results</h3>
+      
+      {/* Stats */}
+      <div style={{ marginTop: '1rem' }}>
+        <p><strong>Status:</strong> {cfdResults.success ? '✅ Completed' : '❌ Failed'}</p>
+        <p><strong>Message:</strong> {cfdResults.message}</p>
+        <p><strong>Computation Time:</strong> {cfdResults.computeTime.toFixed(2)} ms</p>
+        <p><strong>Iterations:</strong> {cfdResults.convergenceHistory.length}</p>
+        {cfdResults.convergenceHistory.length > 0 && (
+          <p><strong>Final Residual:</strong> {cfdResults.convergenceHistory[cfdResults.convergenceHistory.length - 1]?.toExponential(2)}</p>
+        )}
       </div>
-    );
-  };
 
+      {/* NEW: Interactive 3D Visualization */}
+      <div style={{ marginTop: '2rem' }}>
+        <h4>Interactive Flow Visualization</h4>
+        <CFDVisualizationComponent 
+          results={cfdResults} 
+          config={{
+            gridSize: { x: 30, y: 30, z: 30 },
+            fluidProperties: {
+              density: parseFloat(cfdInputs.density),
+              viscosity: parseFloat(cfdInputs.viscosity),
+            },
+            boundaryConditions: [],
+            timeStep: 0.01,
+            iterations: 50,
+          }}
+        />
+      </div>
+    </div>
+  );
+};
   return (
     <div className="container">
       <header>
