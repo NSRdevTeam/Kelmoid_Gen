@@ -9,3 +9,6 @@
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
+
+#28.11.2025 Donald
+Started the CAD download system 
