@@ -16,102 +16,32 @@ declare global {
 
 const systemPrompt = `
 System Role:
-You are KelmoidAI_Genesis_llm, an advanced Text-to-CAD generative large language model designed to transform natural language descriptions into CAD models and simulation setups. You understand mechanical design, architecture, civil structures, and advanced geometric modeling, including time-varying (4D) components and Computational Fluid Dynamics (CFD).
+You are KelmoidAI_Genesis_llm, an advanced Text-to-CAD generative large language model designed to transform natural language descriptions into CadQuery (Python) scripts. You understand mechanical design, architecture, and constructive solid geometry (CSG).
 
 Mission:
-Convert human language prompts into structured CAD instructions, scripts, or files suitable for direct rendering or simulation in engineering and architectural software environments. You output valid and optimized CAD code (e.g., OpenSCAD, FreeCAD, Fusion360, Blender, or STEP representations) and CFD setup files.
+Convert human language prompts into valid, executable CadQuery Python code.
 
-Core Capabilities
-Input:
-Natural language text describing objects, shapes, or assemblies.
-Optional parameters like dimensions, materials, or motion sequences.
-Optional CFD parameters like fluid properties, boundary conditions, and flow velocity.
+Core Capabilities:
+Input: Natural language text describing objects, shapes, or assemblies.
+Output: A JSON object containing the CadQuery script.
 
-Output:
-CAD model definitions in OpenSCAD, STEP, STL, or OBJ formats.
-For 2D: DXF or SVG geometry.
-For 3D: STL, OBJ, or STEP geometry.
-For 4D: Animated transformations or time-dependent model states.
-For CFD: A definition of the geometry, mesh, fluid properties, and boundary conditions.
-
-Domains:
-Mechanical parts (gears, pistons, brackets, casings)
-Architectural structures (buildings, bridges, interiors)
-Civil engineering (roads, pipelines, tunnels)
-Product design (tools, enclosures, prototypes)
-Scientific models (molecular, anatomical, or spatial geometries)
-CFD Simulation (airflow, water flow, heat transfer over geometries)
-
-4D (Time-Varying) Models:
-You have advanced support for 4D designs. Specify temporal transformations through parametric animation or keyframes.
-- Supported Transformations: rotation, deformation, scaling, translation over time.
-- Output Structure: For 4D models, set "model_type" to "4D" and include an "animation_data" object describing the transformations.
-
-CFD (Computational Fluid Dynamics) Models:
-You can define CFD simulations. The user will specify the geometry, fluid properties, and boundary conditions.
-- Supported Concepts: Inlets, outlets, walls (no-slip, slip), velocity, pressure, density, viscosity.
-- Advanced CFD Concepts: You now understand and can implement advanced CFD parameters including:
-  - Turbulence Models: RANS models like k-epsilon, k-omega SST, and Spalart-Allmaras. Specify the model in the user prompt.
-  - Wall Functions: Standard, scalable, or non-equilibrium wall functions for near-wall turbulence modeling.
-  - Inlet/Outlet Profiles: You can define non-uniform profiles for velocity, temperature, etc., using mathematical expressions or descriptive language (e.g., 'parabolic velocity profile').
-- Output Structure: For CFD models, set "model_type" to "CFD" and include a "simulation_data" object describing the setup. The simulation_data should reflect the advanced parameters requested.
-
-Output Format
-You must output a single JSON object with the appropriate structure. For 4D, populate the animation_data field. For CFD, populate simulation_data.
-
-// 4D Example
+Output Format:
+You must output a single JSON object with the following structure:
 {
-  "model_type": "4D",
+  "model_type": "3D",
   "domain": "mechanical",
-  "description": "A gear with 20 teeth, rotating 360 degrees",
-  "cad_script": "...OpenSCAD or FreeCAD code with animation parameters...",
-  "export_format": "Animated GIF/MP4 (conceptual)",
-  "animation_data": {
-    "type": "rotation",
-    "axis": "z",
-    "duration_seconds": 5,
-    "start_angle_deg": 0,
-    "end_angle_deg": 360
-  },
-  "metadata": { "units": "mm", "version": "1.0", "timestamp": "..." }
+  "description": "Description of the generated model",
+  "cad_script": "import cadquery as cq\\nresult = cq.Workplane('XY').box(10, 10, 10)",
+  "metadata": { "units": "mm" }
 }
 
-// CFD Example
-{
-  "model_type": "CFD",
-  "domain": "fluid_dynamics",
-  "description": "Simulation of airflow over a cylinder at 10 m/s using k-epsilon turbulence model.",
-  "cad_script": "cylinder(d=0.1, h=1);",
-  "export_format": "CFD",
-  "simulation_data": {
-    "solver": "OpenFOAM (conceptual)",
-    "simulation_type": "incompressible_flow",
-    "turbulence_model": "k-epsilon",
-    "fluid_properties": {
-      "name": "Air",
-      "density_kg_m3": 1.225,
-      "viscosity_pa_s": 0.0000181
-    },
-    "boundary_conditions": [
-      { "name": "inlet", "type": "velocity", "value": "10 m/s", "direction": "x" },
-      { "name": "outlet", "type": "pressure", "value": "0 Pa" },
-      { "name": "cylinder_wall", "type": "no-slip_wall", "wall_function": "standard" },
-      { "name": "domain_walls", "type": "slip_wall" }
-    ]
-  },
-  "metadata": { "units": "m", "version": "1.0", "timestamp": "..." }
-}
-
-
-Core Behavior Rules
-- Always output valid and executable CAD code or simulation setups.
-- All dimensional units in the user prompt have been automatically converted to a consistent system (either metric 'mm' or imperial 'inches'). Use these units directly.
-- The "units" field in your output metadata must reflect the unit system used in the prompt (e.g., "mm" for metric, "in" for imperial).
-- Optimize geometry for manufacturability and render performance.
-- When uncertain, ask clarifying questions about missing parameters.
-- For 4D objects, define motion through parametric animation or keyframes.
-- For CFD, define the fluid, boundaries, and initial conditions.
-- Your output must be only the JSON object, without any markdown formatting like \`\`\`json.
+Core Behavior Rules:
+- ALWAYS output valid Python code using the 'cadquery' library.
+- The script MUST end with a variable named 'result' or 'part' that contains the final object.
+- Do NOT use 'show_object' or 'debug' in the generated script; the host application will handle visualization.
+- Assume 'import cadquery as cq' is needed.
+- Use metric units (mm) by default unless specified otherwise.
+- Your output must be ONLY the JSON object. Do not include markdown formatting like \`\`\`json.
 `;
 
 const PromptHelperModal = ({ isOpen, onClose }) => {
@@ -172,7 +102,7 @@ const PromptHelperModal = ({ isOpen, onClose }) => {
         </div>
         <div className="modal-body">
           <p>Craft effective prompts by being specific and clear. Here are some tips and examples:</p>
-          
+
           <div className="help-section">
             <h3>Be Specific with Dimensions</h3>
             <p>Always include units like mm, cm, m, inches, or feet. The more precise you are, the better the result.</p>
@@ -186,19 +116,19 @@ const PromptHelperModal = ({ isOpen, onClose }) => {
             <h3>Specifying Export Formats</h3>
             <p>You can request a specific file format using the dropdown menu or by stating it in your prompt. The AI will generate a script or data structure suitable for that format.</p>
             <ul>
-                <li><strong>Common CAD Formats:</strong> OpenSCAD, STEP, STL, OBJ</li>
-                <li><strong>Conceptual CFD Formats:</strong> OpenFOAM_mesh, Fluent_mesh, VTK</li>
+              <li><strong>Common CAD Formats:</strong> OpenSCAD, STEP, STL, OBJ</li>
+              <li><strong>Conceptual CFD Formats:</strong> OpenFOAM_mesh, Fluent_mesh, VTK</li>
             </ul>
             <div className="example">
-                <code>{examples.exportFormatExample}</code>
-                <button className="copy-button" onClick={() => handleCopy(examples.exportFormatExample)}>Copy</button>
+              <code>{examples.exportFormatExample}</code>
+              <button className="copy-button" onClick={() => handleCopy(examples.exportFormatExample)}>Copy</button>
             </div>
           </div>
 
           <div className="help-section">
             <h3>Specifying Material Properties</h3>
             <p>Define the material for your model. This is crucial for simulations (CFD/FEA) but also useful for specifying the type of material for a CAD model.</p>
-            
+
             <h5>For Simple CAD Models</h5>
             <p>Just stating the material name is often enough.</p>
             <div className="example">
@@ -220,7 +150,7 @@ const PromptHelperModal = ({ isOpen, onClose }) => {
               <button className="copy-button" onClick={() => handleCopy(examples.materialThermal)}>Copy</button>
             </div>
           </div>
-          
+
           <div className="help-section">
             <h3>Mechanical Domain</h3>
             <p>Use keywords like <strong>gear, bearing, piston, shaft, bracket, enclosure, threads (e.g., M5), tolerance, assembly</strong>.</p>
@@ -253,7 +183,7 @@ const PromptHelperModal = ({ isOpen, onClose }) => {
               <code>{examples.cfdWater}</code>
               <button className="copy-button" onClick={() => handleCopy(examples.cfdWater)}>Copy</button>
             </div>
-            
+
             <h4>Multiphase Flow</h4>
             <p>
               Simulate systems with two or more distinct fluids, like water and air. These models are essential for analyzing phenomena such as droplet formation, bubble dynamics, and liquid-air interfaces. The <strong>Volume of Fluid (VOF)</strong> model is a common and effective method for tracking the interface between the fluids.
@@ -283,7 +213,7 @@ const PromptHelperModal = ({ isOpen, onClose }) => {
 
             <h4>Advanced CFD Parameters</h4>
             <p>For more complex simulations, you can specify turbulence models, wall treatments, and custom boundary profiles to achieve higher fidelity results.</p>
-            
+
             <h5>Turbulence Models</h5>
             <p>Required for non-laminar (turbulent) flows. The choice of model impacts accuracy and computational cost.</p>
             <div className="example">
@@ -310,7 +240,7 @@ const PromptHelperModal = ({ isOpen, onClose }) => {
               <code>{examples.cfdInletProfileFormula}</code>
               <button className="copy-button" onClick={() => handleCopy(examples.cfdInletProfileFormula)}>Copy</button>
             </div>
-            
+
             <p><strong>Angled Flow:</strong> Specify the velocity direction using an angle or a vector for non-axial flow.</p>
             <div className="example">
               <code>{examples.cfdInletProfileAngled}</code>
@@ -322,16 +252,16 @@ const PromptHelperModal = ({ isOpen, onClose }) => {
               <code>{examples.cfdInletProfileSwirl}</code>
               <button className="copy-button" onClick={() => handleCopy(examples.cfdInletProfileSwirl)}>Copy</button>
             </div>
-            
+
             <p><strong>Turbulent Profile:</strong> For turbulent flows, you can specify common engineering profiles like the power law.</p>
             <div className="example">
               <code>{examples.cfdInletProfileTurbulent}</code>
               <button className="copy-button" onClick={() => handleCopy(examples.cfdInletProfileTurbulent)}>Copy</button>
             </div>
-            
+
             <h4>Mesh Properties (Optional)</h4>
             <p>Control the resolution of your simulation grid. A finer mesh gives more accurate results but requires more computation. You can specify global settings or local refinements.</p>
-            
+
             <p><strong>Global Cell Size:</strong> Sets a uniform size for mesh cells everywhere. Good for simple geometries.</p>
             <div className="example">
               <code>{examples.cfdMeshGlobal}</code>
@@ -353,7 +283,7 @@ const PromptHelperModal = ({ isOpen, onClose }) => {
 
             <h4>Boundary Conditions</h4>
             <p>Clearly define how the fluid interacts with the boundaries of your domain. Being explicit is key.</p>
-            
+
             <h5>Inlet Conditions (Where fluid enters)</h5>
             <p><strong>Uniform:</strong> The simplest inlet, where velocity is constant across the entire face. Good for general cases.</p>
             <div className="example">
@@ -397,7 +327,7 @@ const PromptHelperModal = ({ isOpen, onClose }) => {
               <button className="copy-button" onClick={() => handleCopy(examples.cfdBoundarySymmetry)}>Copy</button>
             </div>
             <p><strong>Periodic:</strong> What exits one boundary enters the opposite one, useful for repeating patterns (e.g., heat exchanger fins, turbine blades).</p>
-             <div className="example">
+            <div className="example">
               <code>{examples.cfdBoundaryPeriodic}</code>
               <button className="copy-button" onClick={() => handleCopy(examples.cfdBoundaryPeriodic)}>Copy</button>
             </div>
@@ -406,7 +336,7 @@ const PromptHelperModal = ({ isOpen, onClose }) => {
           <div className="help-section">
             <h3>4D / Animation Parameters</h3>
             <p>Use the dedicated input field for animations. Clearly describe the transformation, axis, magnitude, and duration. Be as descriptive as possible.</p>
-            
+
             <h4>Basic Transformations</h4>
             <ul>
               <li><strong>Rotation:</strong> 'rotation on Z-axis, 360 degrees over 5 seconds'</li>
@@ -422,7 +352,7 @@ const PromptHelperModal = ({ isOpen, onClose }) => {
             </div>
 
             <p><strong>Sequential Animations:</strong> Use words like "first," "then," and "after that" to define a sequence of events.</p>
-             <div className="example">
+            <div className="example">
               <code>{examples.fourDSequential}</code>
               <button className="copy-button" onClick={() => handleCopy(examples.fourDSequential)}>Copy</button>
             </div>
@@ -432,14 +362,14 @@ const PromptHelperModal = ({ isOpen, onClose }) => {
 
             <p><strong>Bending Example:</strong></p>
             <div className="example">
-                <code>{examples.fourDBending}</code>
-                <button className="copy-button" onClick={() => handleCopy(examples.fourDBending)}>Copy</button>
+              <code>{examples.fourDBending}</code>
+              <button className="copy-button" onClick={() => handleCopy(examples.fourDBending)}>Copy</button>
             </div>
 
             <p><strong>Twisting Example:</strong></p>
             <div className="example">
-                <code>{examples.fourDTwisting}</code>
-                <button className="copy-button" onClick={() => handleCopy(examples.fourDTwisting)}>Copy</button>
+              <code>{examples.fourDTwisting}</code>
+              <button className="copy-button" onClick={() => handleCopy(examples.fourDTwisting)}>Copy</button>
             </div>
           </div>
 
@@ -463,7 +393,7 @@ const PromptHistoryModal = ({ isOpen, onClose, history, onLoad, onClear }) => {
           {history.length > 0 ? (
             <>
               <div className="history-actions">
-                  <button className="clear-history-button" onClick={onClear}>Clear All History</button>
+                <button className="clear-history-button" onClick={onClear}>Clear All History</button>
               </div>
               <ul className="history-list">
                 {history.map((item) => (
@@ -472,7 +402,7 @@ const PromptHistoryModal = ({ isOpen, onClose, history, onLoad, onClear }) => {
                       {item.prompt}
                     </p>
                     <div className="history-item-actions">
-                       <button className="load-button" onClick={() => onLoad(item)}>Load</button>
+                      <button className="load-button" onClick={() => onLoad(item)}>Load</button>
                     </div>
                   </li>
                 ))}
@@ -489,74 +419,74 @@ const PromptHistoryModal = ({ isOpen, onClose, history, onLoad, onClear }) => {
 
 
 const CONVERSION_FACTORS = {
-    'in_to_mm': 25.4,
-    'ft_to_mm': 304.8,
-    'm_to_mm': 1000,
-    'cm_to_mm': 10,
-    'mm_to_in': 1 / 25.4,
-    'm_to_in': 1000 / 25.4,
-    'cm_to_in': 10 / 25.4,
+  'in_to_mm': 25.4,
+  'ft_to_mm': 304.8,
+  'm_to_mm': 1000,
+  'cm_to_mm': 10,
+  'mm_to_in': 1 / 25.4,
+  'm_to_in': 1000 / 25.4,
+  'cm_to_in': 10 / 25.4,
 };
 
 const unitPatterns = [
-    { name: 'in', regex: new RegExp(`\\b(\\d*\\.?\\d+)\\s*(?:inch|inches|in|")`, 'gi') },
-    { name: 'ft', regex: new RegExp(`\\b(\\d*\\.?\\d+)\\s*(?:foot|feet|ft|')`, 'gi') },
-    { name: 'm', regex: new RegExp(`\\b(\\d*\\.?\\d+)\\s*(?:meter|meters|m)`, 'gi') },
-    { name: 'cm', regex: new RegExp(`\\b(\\d*\\.?\\d+)\\s*(?:centimeter|centimeters|cm)`, 'gi') },
-    { name: 'mm', regex: new RegExp(`\\b(\\d*\\.?\\d+)\\s*(?:millimeter|millimeters|mm)`, 'gi') },
+  { name: 'in', regex: new RegExp(`\\b(\\d*\\.?\\d+)\\s*(?:inch|inches|in|")`, 'gi') },
+  { name: 'ft', regex: new RegExp(`\\b(\\d*\\.?\\d+)\\s*(?:foot|feet|ft|')`, 'gi') },
+  { name: 'm', regex: new RegExp(`\\b(\\d*\\.?\\d+)\\s*(?:meter|meters|m)`, 'gi') },
+  { name: 'cm', regex: new RegExp(`\\b(\\d*\\.?\\d+)\\s*(?:centimeter|centimeters|cm)`, 'gi') },
+  { name: 'mm', regex: new RegExp(`\\b(\\d*\\.?\\d+)\\s*(?:millimeter|millimeters|mm)`, 'gi') },
 ];
 
 
 const convertUnits = (prompt, targetSystem) => {
-    let convertedPrompt = prompt;
-    // Fix: Explicitly type `logEntries` as a Set of strings to avoid type errors.
-    const logEntries = new Set<string>();
+  let convertedPrompt = prompt;
+  // Fix: Explicitly type `logEntries` as a Set of strings to avoid type errors.
+  const logEntries = new Set<string>();
 
-    const targetUnit = targetSystem === 'Metric' ? 'mm' : 'in';
+  const targetUnit = targetSystem === 'Metric' ? 'mm' : 'in';
 
-    unitPatterns.forEach(({ name, regex }) => {
-        // We need to reset lastIndex for global regex in a loop
-        regex.lastIndex = 0;
-        let match;
-        while ((match = regex.exec(convertedPrompt)) !== null) {
-            const originalMatch = match[0];
-            const value = parseFloat(match[1]);
-            let convertedValue;
+  unitPatterns.forEach(({ name, regex }) => {
+    // We need to reset lastIndex for global regex in a loop
+    regex.lastIndex = 0;
+    let match;
+    while ((match = regex.exec(convertedPrompt)) !== null) {
+      const originalMatch = match[0];
+      const value = parseFloat(match[1]);
+      let convertedValue;
 
-            if (targetSystem === 'Metric') {
-                if (name === 'in') convertedValue = value * CONVERSION_FACTORS.in_to_mm;
-                else if (name === 'ft') convertedValue = value * CONVERSION_FACTORS.ft_to_mm;
-                else if (name === 'm') convertedValue = value * CONVERSION_FACTORS.m_to_mm;
-                else if (name === 'cm') convertedValue = value * CONVERSION_FACTORS.cm_to_mm;
-                else continue; // Already metric mm, or not convertible
-            } else { // Imperial
-                if (name === 'mm') convertedValue = value * CONVERSION_FACTORS.mm_to_in;
-                else if (name === 'cm') convertedValue = value * CONVERSION_FACTORS.cm_to_in;
-                else if (name === 'm') convertedValue = value * CONVERSION_FACTORS.m_to_in;
-                else continue; // Already imperial in/ft, or not convertible
-            }
-            
-            if (convertedValue !== undefined) {
-                 const roundedValue = Math.round(convertedValue * 100) / 100;
-                 const replacement = `${roundedValue} ${targetUnit}`;
-                 logEntries.add(`'${originalMatch}' -> '${replacement}'`);
-            }
-        }
-    });
-    
-    // Perform the replacements after finding all matches to avoid conflicts
-    logEntries.forEach(logEntry => {
-        const [original, replacement] = logEntry.split(' -> ');
-        const originalText = original.slice(1,-1); // remove quotes
-        const replacementText = replacement.slice(1,-1);
-        // Use a regex to replace to ensure we replace whole words
-        convertedPrompt = convertedPrompt.replace(new RegExp(`\\b${originalText}\\b`, 'gi'), replacementText);
-    });
+      if (targetSystem === 'Metric') {
+        if (name === 'in') convertedValue = value * CONVERSION_FACTORS.in_to_mm;
+        else if (name === 'ft') convertedValue = value * CONVERSION_FACTORS.ft_to_mm;
+        else if (name === 'm') convertedValue = value * CONVERSION_FACTORS.m_to_mm;
+        else if (name === 'cm') convertedValue = value * CONVERSION_FACTORS.cm_to_mm;
+        else continue; // Already metric mm, or not convertible
+      } else { // Imperial
+        if (name === 'mm') convertedValue = value * CONVERSION_FACTORS.mm_to_in;
+        else if (name === 'cm') convertedValue = value * CONVERSION_FACTORS.cm_to_in;
+        else if (name === 'm') convertedValue = value * CONVERSION_FACTORS.m_to_in;
+        else continue; // Already imperial in/ft, or not convertible
+      }
 
-    return {
-        convertedPrompt,
-        log: Array.from(logEntries).join(', ')
-    };
+      if (convertedValue !== undefined) {
+        const roundedValue = Math.round(convertedValue * 100) / 100;
+        const replacement = `${roundedValue} ${targetUnit}`;
+        logEntries.add(`'${originalMatch}' -> '${replacement}'`);
+      }
+    }
+  });
+
+  // Perform the replacements after finding all matches to avoid conflicts
+  logEntries.forEach(logEntry => {
+    const [original, replacement] = logEntry.split(' -> ');
+    const originalText = original.slice(1, -1); // remove quotes
+    const replacementText = replacement.slice(1, -1);
+    // Use a regex to replace to ensure we replace whole words
+    convertedPrompt = convertedPrompt.replace(new RegExp(`\\b${originalText}\\b`, 'gi'), replacementText);
+  });
+
+  return {
+    convertedPrompt,
+    log: Array.from(logEntries).join(', ')
+  };
 }
 
 
@@ -602,10 +532,10 @@ const App = () => {
 
     try {
 
-      
+
       const { convertedPrompt, log } = convertUnits(prompt, defaultUnitSystem);
       if (log) {
-          setUnitConversionLog(log);
+        setUnitConversionLog(log);
       }
 
       // Combine main prompt with parameters and export format
@@ -620,7 +550,7 @@ ${cfdParams.trim() ? `\nCFD Parameters: ${cfdParams}` : ''}
       // Step 1: Generate CAD Script
       setLoadingStatus('Generating CAD script...');
       const scriptResponse = await window.electron.generateContent(
-        'gemini-2.5-pro',
+        'gemini-2.0-flash-exp',
         `${systemPrompt}\n\nUser Prompt: ${fullPrompt}`
       );
 
@@ -646,9 +576,9 @@ ${cfdParams.trim() ? `\nCFD Parameters: ${cfdParams}` : ''}
       } else {
         imagePrompt = `Photorealistic 3D CAD render of: ${convertedPrompt}. ${materialParams.trim() ? `Material: ${materialParams}.` : ''} ${fourDParams.trim() ? `Animation details: ${fourDParams}.` : ''} ${cfdParams.trim() ? `CFD simulation visualization: ${cfdParams}.` : ''} Professional studio lighting, detailed, high-resolution, on a neutral background.`;
       }
-      
+
       const imageResponse = await window.electron.generateImages(
-        'imagen-4.0-generate-001',
+        'imagen-3.0-generate-001',
         imagePrompt,
         {
           numberOfImages: 1,
@@ -661,8 +591,8 @@ ${cfdParams.trim() ? `\nCFD Parameters: ${cfdParams}` : ''}
       const generatedImageUrl = `data:image/png;base64,${base64ImageBytes}`;
       setImageUrl(generatedImageUrl);
 
-       // Save to history on success
-       const newHistoryEntry = {
+      // Save to history on success
+      const newHistoryEntry = {
         id: Date.now(),
         prompt,
         materialParams,
@@ -740,8 +670,8 @@ ${cfdParams.trim() ? `\nCFD Parameters: ${cfdParams}` : ''}
 
   const handleClearPromptHistory = () => {
     if (window.confirm('Are you sure you want to clear your entire prompt history? This cannot be undone.')) {
-        setPromptHistory([]);
-        localStorage.removeItem('promptHistory');
+      setPromptHistory([]);
+      localStorage.removeItem('promptHistory');
     }
   };
 
@@ -751,7 +681,7 @@ ${cfdParams.trim() ? `\nCFD Parameters: ${cfdParams}` : ''}
         <h1>KelmoidAI <span>Genesis llm</span></h1>
         <p>Your personal Text-to-CAD generative model</p>
       </header>
-      
+
       <div className="card">
         <div className="form-group">
           <div className="label-group">
@@ -805,51 +735,51 @@ ${cfdParams.trim() ? `\nCFD Parameters: ${cfdParams}` : ''}
         </div>
 
         <div className="settings-row">
-            <div className="form-group">
-              <label htmlFor="unit-system-select">Default Unit System</label>
-                <select
-                  id="unit-system-select"
-                  value={defaultUnitSystem}
-                  onChange={(e) => setDefaultUnitSystem(e.target.value)}
-                  disabled={isLoading}
-                  aria-label="Select default unit system"
-                >
-                  <option value="Metric">Metric (mm)</option>
-                  <option value="Imperial">Imperial (inches)</option>
-                </select>
-            </div>
-            <div className="form-group">
-              <label htmlFor="export-format-select">Export Format</label>
-                <select
-                  id="export-format-select"
-                  value={exportFormat}
-                  onChange={(e) => setExportFormat(e.target.value)}
-                  disabled={isLoading}
-                  aria-label="Select CAD export format"
-                >
-                  <option value="OpenSCAD">OpenSCAD</option>
-                  <option value="STEP">STEP</option>
-                  <option value="STL">STL</option>
-                  <option value="OBJ">OBJ</option>
-                  <option value="CFD">CFD</option>
-                </select>
-            </div>
-            <div className="form-group">
-              <label htmlFor="aspect-ratio-select">Aspect Ratio</label>
-                <select
-                  id="aspect-ratio-select"
-                  value={aspectRatio}
-                  onChange={(e) => setAspectRatio(e.target.value)}
-                  disabled={isLoading}
-                  aria-label="Select image aspect ratio"
-                >
-                  <option value="1:1">1:1 (Square)</option>
-                  <option value="4:3">4:3 (Landscape)</option>
-                  <option value="3:4">3:4 (Portrait)</option>
-                  <option value="16:9">16:9 (Widescreen)</option>
-                  <option value="9:16">9:16 (Tall)</option>
-                </select>
-            </div>
+          <div className="form-group">
+            <label htmlFor="unit-system-select">Default Unit System</label>
+            <select
+              id="unit-system-select"
+              value={defaultUnitSystem}
+              onChange={(e) => setDefaultUnitSystem(e.target.value)}
+              disabled={isLoading}
+              aria-label="Select default unit system"
+            >
+              <option value="Metric">Metric (mm)</option>
+              <option value="Imperial">Imperial (inches)</option>
+            </select>
+          </div>
+          <div className="form-group">
+            <label htmlFor="export-format-select">Export Format</label>
+            <select
+              id="export-format-select"
+              value={exportFormat}
+              onChange={(e) => setExportFormat(e.target.value)}
+              disabled={isLoading}
+              aria-label="Select CAD export format"
+            >
+              <option value="OpenSCAD">OpenSCAD</option>
+              <option value="STEP">STEP</option>
+              <option value="STL">STL</option>
+              <option value="OBJ">OBJ</option>
+              <option value="CFD">CFD</option>
+            </select>
+          </div>
+          <div className="form-group">
+            <label htmlFor="aspect-ratio-select">Aspect Ratio</label>
+            <select
+              id="aspect-ratio-select"
+              value={aspectRatio}
+              onChange={(e) => setAspectRatio(e.target.value)}
+              disabled={isLoading}
+              aria-label="Select image aspect ratio"
+            >
+              <option value="1:1">1:1 (Square)</option>
+              <option value="4:3">4:3 (Landscape)</option>
+              <option value="3:4">3:4 (Portrait)</option>
+              <option value="16:9">16:9 (Widescreen)</option>
+              <option value="9:16">9:16 (Tall)</option>
+            </select>
+          </div>
         </div>
 
         <div className="button-group">
@@ -868,11 +798,11 @@ ${cfdParams.trim() ? `\nCFD Parameters: ${cfdParams}` : ''}
           {isLoading && <div className="loader" role="status" aria-label="Loading"></div>}
           {unitConversionLog && (
             <div className="conversion-log">
-                <p><strong>Unit Conversions:</strong> {unitConversionLog}</p>
+              <p><strong>Unit Conversions:</strong> {unitConversionLog}</p>
             </div>
           )}
           {error && <div className="error-message">{error}</div>}
-          
+
           {(imageUrl || (isLoading && !imageUrl)) && (
             <div className="image-container">
               {imageUrl ? (
