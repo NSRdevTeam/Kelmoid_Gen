@@ -772,3 +772,86 @@ code {
         grid-template-columns: 1fr;
     }
 }
+
+.download-button {
+    padding: 1rem;
+    font-size: 1rem;
+    font-weight: 600;
+    border: 1px solid #3f3f46;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    background-color: #27272a;
+    color: #e5e5e5;
+    min-height: 100px;
+}
+
+.download-button:hover {
+    background-color: #3f3f46;
+    border-color: #ff8a00;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(255, 138, 0, 0.2);
+}
+
+.download-button:hover span:first-child {
+    transform: scale(1.2);
+}
+
+.download-button:active {
+    transform: translateY(0);
+}
+
+.download-button span:first-child {
+    transition: transform 0.3s ease;
+}
+
+.download-button small {
+    display: block;
+    margin-top: 0.25rem;
+}
+
+/* Download section animations */
+@keyframes downloadPulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.7;
+    }
+}
+
+.download-button:disabled {
+    background-color: #1c1917;
+    color: #52525b;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.download-button:disabled:hover {
+    border-color: #3f3f46;
+    box-shadow: none;
+}
+
+/* Success animation after download */
+@keyframes downloadSuccess {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.05);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+.download-button.success {
+    animation: downloadSuccess 0.3s ease;
+    background-color: rgba(34, 197, 94, 0.2);
+    border-color: #22c55e;
+}
