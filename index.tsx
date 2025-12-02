@@ -642,7 +642,7 @@ const handleDownloadCAD = (format: string) => {
   }
 };
 
-// 4. ADD MULTI-FORMAT DOWNLOAD HANDLER:
+// MULTI-FORMAT DOWNLOAD HANDLER:
 const handleDownloadMultiFormat = () => {
   if (!output) {
     setError('No CAD model to download. Please generate a model first.');
@@ -854,6 +854,79 @@ ${buildCfdString()}
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
+
+  // CAD Download Handlers
+  const handleDownloadCAD = (format: string) => {
+    if (!output) {
+      setError('No CAD model to download. Please generate a model first.');
+      return;
+    }
+
+    try {
+      // Parse the output JSON
+      const jsonOutput = JSON.parse(output);
+      
+      // Create CAD model object
+      const cadModel: CADModel = {
+        script: jsonOutput.cad_script || '',
+        format: format as any,
+        metadata: {
+          modelName: jsonOutput.description || 'kelmoid_model',
+          description: jsonOutput.description || 'AI Generated CAD Model',
+          units: jsonOutput.metadata?.units || 'mm',
+          timestamp: new Date().toISOString()
+        }
+      };
+
+      // Validate before download
+      const validation = downloadManager.current.validateCAD(cadModel);
+      if (!validation.valid) {
+        setError(`Cannot download: ${validation.errors.join(', ')}`);
+        return;
+      }
+
+      // Download the file
+      downloadManager.current.downloadCAD(cadModel);
+      
+      console.log(`✅ Downloaded ${format} file successfully`);
+      
+    } catch (error) {
+      console.error('Download error:', error);
+      setError(`Failed to download CAD file: ${error.message}`);
+    }
+  };
+
+  const handleDownloadMultiFormat = () => {
+    if (!output) {
+      setError('No CAD model to download. Please generate a model first.');
+      return;
+    }
+
+    try {
+      const jsonOutput = JSON.parse(output);
+      
+      const cadModel: CADModel = {
+        script: jsonOutput.cad_script || '',
+        format: 'STL' as any,
+        metadata: {
+          modelName: jsonOutput.description || 'kelmoid_model',
+          description: jsonOutput.description || 'AI Generated CAD Model',
+          units: jsonOutput.metadata?.units || 'mm',
+          timestamp: new Date().toISOString()
+        }
+      };
+
+      // Download in multiple formats
+      const formats = ['STL', 'OpenSCAD', 'OBJ'];
+      downloadManager.current.downloadMultiFormat(cadModel, formats);
+      
+      console.log(`✅ Downloading ${formats.length} formats...`);
+      
+    } catch (error) {
+      console.error('Multi-format download error:', error);
+      setError(`Failed to download files: ${error.message}`);
+    }
   };
 
   const OptimizationPanel = () => {
@@ -1269,6 +1342,102 @@ ${buildCfdString()}
               <code>{output}</code>
             </pre>
           </div>
+
+          {/* NEW: CAD Download Section */}
+          {output && (
+            <div className="card" style={{ marginTop: '2rem' }}>
+              <h3>📥 Download CAD Files</h3>
+              
+              <div style={{ marginTop: '1rem' }}>
+                <p style={{ color: '#a1a1aa', marginBottom: '1rem' }}>
+                  Download your generated CAD model in various formats for use in professional CAD software.
+                </p>
+                
+                {/* Individual format downloads */}
+                <div style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+                  gap: '1rem',
+                  marginBottom: '1.5rem'
+                }}>
+                  <button 
+                    className="download-button"
+                    onClick={() => handleDownloadCAD('STL')}
+                    title="Download as STL (3D Printing)"
+                  >
+                    <span style={{ fontSize: '1.5rem' }}>📐</span>
+                    <span>STL</span>
+                    <small style={{ fontSize: '0.75rem', opacity: 0.7 }}>3D Printing</small>
+                  </button>
+
+                  <button 
+                    className="download-button"
+                    onClick={() => handleDownloadCAD('OpenSCAD')}
+                    title="Download as OpenSCAD (Parametric)"
+                  >
+                    <span style={{ fontSize: '1.5rem' }}>🔧</span>
+                    <span>OpenSCAD</span>
+                    <small style={{ fontSize: '0.75rem', opacity: 0.7 }}>Parametric</small>
+                  </button>
+
+                  <button 
+                    className="download-button"
+                    onClick={() => handleDownloadCAD('OBJ')}
+                    title="Download as OBJ (3D Modeling)"
+                  >
+                    <span style={{ fontSize: '1.5rem' }}>🎨</span>
+                    <span>OBJ</span>
+                    <small style={{ fontSize: '0.75rem', opacity: 0.7 }}>3D Modeling</small>
+                  </button>
+
+                  <button 
+                    className="download-button"
+                    onClick={() => handleDownloadCAD('STEP')}
+                    title="Download as STEP (Professional CAD)"
+                  >
+                    <span style={{ fontSize: '1.5rem' }}>⚙️</span>
+                    <span>STEP</span>
+                    <small style={{ fontSize: '0.75rem', opacity: 0.7 }}>Pro CAD</small>
+                  </button>
+                </div>
+
+                {/* Download all formats */}
+                <div style={{ 
+                  borderTop: '1px solid #3f3f46',
+                  paddingTop: '1rem'
+                }}>
+                  <button 
+                    className="generate-button"
+                    onClick={handleDownloadMultiFormat}
+                    style={{ width: '100%' }}
+                  >
+                    📦 Download All Formats (STL + OpenSCAD + OBJ)
+                  </button>
+                </div>
+
+                {/* Download info */}
+                <div style={{ 
+                  marginTop: '1rem',
+                  padding: '1rem',
+                  backgroundColor: 'rgba(255, 138, 0, 0.05)',
+                  borderRadius: '8px',
+                  border: '1px solid rgba(255, 138, 0, 0.2)'
+                }}>
+                  <p style={{ 
+                    margin: 0, 
+                    fontSize: '0.875rem', 
+                    color: '#d4d4d8' 
+                  }}>
+                    <strong style={{ color: '#ff8a00' }}>💡 Format Guide:</strong><br/>
+                    <strong>STL:</strong> For 3D printing (MakerBot, Ultimaker, Prusa)<br/>
+                    <strong>OpenSCAD:</strong> For parametric editing and modifications<br/>
+                    <strong>OBJ:</strong> For Blender, Maya, 3ds Max, Unity<br/>
+                    <strong>STEP:</strong> For SolidWorks, Fusion 360, Inventor, CATIA
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
