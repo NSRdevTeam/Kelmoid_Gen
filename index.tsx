@@ -602,78 +602,6 @@ const App = () => {
     }
   };
 
-const handleDownloadCAD = (format: string) => {
-  if (!output) {
-    setError('No CAD model to download. Please generate a model first.');
-    return;
-  }
-
-  try {
-    // Parse the output JSON
-    const jsonOutput = JSON.parse(output);
-    
-    // Create CAD model object
-    const cadModel: CADModel = {
-      script: jsonOutput.cad_script || '',
-      format: format as any,
-      metadata: {
-        modelName: jsonOutput.description || 'kelmoid_model',
-        description: jsonOutput.description || 'AI Generated CAD Model',
-        units: jsonOutput.metadata?.units || 'mm',
-        timestamp: new Date().toISOString()
-      }
-    };
-
-    // Validate before download
-    const validation = downloadManager.current.validateCAD(cadModel);
-    if (!validation.valid) {
-      setError(`Cannot download: ${validation.errors.join(', ')}`);
-      return;
-    }
-
-    // Download the file
-    downloadManager.current.downloadCAD(cadModel);
-    
-    console.log(`✅ Downloaded ${format} file successfully`);
-    
-  } catch (error) {
-    console.error('Download error:', error);
-    setError(`Failed to download CAD file: ${error.message}`);
-  }
-};
-
-// MULTI-FORMAT DOWNLOAD HANDLER:
-const handleDownloadMultiFormat = () => {
-  if (!output) {
-    setError('No CAD model to download. Please generate a model first.');
-    return;
-  }
-
-  try {
-    const jsonOutput = JSON.parse(output);
-    
-    const cadModel: CADModel = {
-      script: jsonOutput.cad_script || '',
-      format: 'STL' as any,
-      metadata: {
-        modelName: jsonOutput.description || 'kelmoid_model',
-        description: jsonOutput.description || 'AI Generated CAD Model',
-        units: jsonOutput.metadata?.units || 'mm',
-        timestamp: new Date().toISOString()
-      }
-    };
-
-    // Download in multiple formats
-    const formats = ['STL', 'OpenSCAD', 'OBJ'];
-    downloadManager.current.downloadMultiFormat(cadModel, formats);
-    
-    console.log(`✅ Downloading ${formats.length} formats...`);
-    
-  } catch (error) {
-    console.error('Multi-format download error:', error);
-    setError(`Failed to download files: ${error.message}`);
-  }
-};
 
   const handleGenerate = async () => {
     if (!prompt.trim()) {
@@ -880,14 +808,14 @@ ${buildCfdString()}
       };
 
       // Validate before download
-      const validation = downloadManager.current.validateCAD(cadModel);
+      const validation = CADDownloadManager.current.validateCAD(cadModel);
       if (!validation.valid) {
         setError(`Cannot download: ${validation.errors.join(', ')}`);
         return;
       }
 
       // Download the file
-      downloadManager.current.downloadCAD(cadModel);
+      CADDownloadManager.current.downloadCAD(cadModel);
       
       console.log(`✅ Downloaded ${format} file successfully`);
       
@@ -919,7 +847,7 @@ ${buildCfdString()}
 
       // Download in multiple formats
       const formats = ['STL', 'OpenSCAD', 'OBJ'];
-      downloadManager.current.downloadMultiFormat(cadModel, formats);
+      CADDownloadManager.current.downloadMultiFormat(cadModel, formats);
       
       console.log(`✅ Downloading ${formats.length} formats...`);
       
@@ -941,13 +869,16 @@ ${buildCfdString()}
           <ul style={{ marginLeft: '1.5rem' }}>
             <li>Primary Shape: <strong>{optimizedPromptData.designIntent.primaryShape}</strong></li>
             <li>Confidence: <strong>{(optimizedPromptData.designIntent.confidence * 100).toFixed(0)}%</strong></li>
-            {optimizedPromptData.designIntent.dimensions.size > 0 && (
-              <li>
-                Dimensions: {Array.from(optimizedPromptData.designIntent.dimensions.entries()).map(
-                  ([key, val]) => `${key}: ${val}`
-                ).join(', ')}
-              </li>
-            )}
+            {optimizedPromptData.designIntent.dimensions &&
+ Object.keys(optimizedPromptData.designIntent.dimensions).length > 0 && (
+  <li>
+    Dimensions:{' '}
+    {Object.entries(optimizedPromptData.designIntent.dimensions)
+      .map(([key, val]) => `${key}: ${val}`)
+      .join(', ')}
+  </li>
+)}
+
             {optimizedPromptData.designIntent.features.length > 0 && (
               <li>Features: {optimizedPromptData.designIntent.features.join(', ')}</li>
             )}

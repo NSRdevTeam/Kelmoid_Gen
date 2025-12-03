@@ -10,6 +10,7 @@ interface CADModel {
 }
 
 class CADDownloadManager {
+  static current: any;
   /**
    * Download CAD model file
    */
