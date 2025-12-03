@@ -1,0 +1,170 @@
+import re
+import os
+import json
+from datetime import datetime
+import time
+from dotenv import load_dotenv
+from openai import OpenAI
+
+load_dotenv()
+
+class OpenSCADGenerator:
+    def __init__(self, gear_parameters_file="gears.json"):
+        self.last_generated_code = None 
+        self.client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=os.getenv("OPENROUTER_API_KEY"),
+            timeout=30.0
+        )
+        
+        # Load gear parameters from external JSON file
+        try:
+            with open(gear_parameters_file, 'r') as f:
+                self.gear_parameters = json.load(f)
+        except FileNotFoundError:
+            raise Exception(f"Gear parameters file not found: {gear_parameters_file}")
+        except json.JSONDecodeError:
+            raise Exception(f"Invalid JSON in gear parameters file: {gear_parameters_file}")
+        
+        # Enhanced system prompt with gear parameter knowledge
+        self.SYSTEM_PROMPT = """You are an expert in OpenSCAD and parametric 3D modeling with a specialization in generating gear systems.
+        You have access to standard gear parameters and must support the following gear types:
+            - spur_gear
+            - worm
+            - worm_drive
+            - rack_and_pinion
+            - planetary_gear
+
+        General Guidelines:
+            1- Use modern OpenSCAD syntax only — avoid deprecated features.
+            2- Enclose all code blocks with proper braces {}.
+            3- Declare all variables before use.
+            4- Ensure the models are manifold and valid for 3D printing.
+            5- Use the latest MCAD library standards for gear modeling.
+            6- Include echo() debug statements for all key parameters.
+            7- Maintain clear indentation and formatting.
+            8- Add inline comments explaining any complex operations.
+            9- Always include a call to the main rendering module (e.g., planetary_gear_system();).
+            10- Do not use deprecated keywords like assign() or child(). Use let() and children() instead.
+
+        Gear Modeling Instructions:
+            - Use standard gear modules from the MCAD library.
+            - Validate gear tooth geometry.
+            - Ensure correct meshing between gear pairs.
+            - Add parameters for easy customization and reuse.
+
+        Important Naming Conventions:
+            - Never use module as a variable name — it is reserved.
+            - Use descriptive alternatives like gear_module, m, or tooth_size.
+            - Follow OpenSCAD variable and function naming standards consistently.
+
+        Gear Type Specifics:
+
+            1- Spur Gear Parameters:
+                gear_module (tooth size)
+                num_teeth
+                bore_diameter
+                face_width
+                pressure_angle
+
+            2- Worm Gear Additional Parameters:
+                worm_starts
+                lead_angle
+                worm_length
+
+            3- Planetary Gear Parameters:
+                num_planets
+                sun_teeth
+                planet_teeth
+                ring_teeth
+
+        Behavior:
+
+        - Check if the user-requested gear matches standard parameters.
+        - If so, use those directly; otherwise, select the closest matching values.
+        - Always make your models fully parametric and editable.
+        - Generate a complete OpenSCAD module with comments, parameter definitions, and a rendering call."""
+        
+        self.messages = [{"role": "system", "content": self.SYSTEM_PROMPT}]
+        
+        # Create outputs directory if it doesn't exist
+        os.makedirs("outputs", exist_ok=True)
+
+    def find_matching_gear(self, gear_type, params):
+        """Find the closest matching gear from our parameter sets"""
+        best_match = None
+        best_score = 0
+        
+        for gear_name, gear_data in self.gear_parameters["parameterSets"].items():
+            if gear_data["Gear_type"] != gear_type:
+                continue
+                
+            score = 0
+            for param, value in params.items():
+                if param in gear_data and str(gear_data[param]) == str(value):
+                    score += 1
+            
+            if score > best_score:
+                best_score = score
+                best_match = gear_data
+                best_match['name'] = gear_name
+        
+        return best_match
+
+    def generate_gear_prompt(self, user_prompt):
+        """Enhance any gear-related prompt with gear parameter information"""
+        if "gear" not in user_prompt.lower():
+            return user_prompt  # Not a gear request
+
+        # Try to detect specific gear types first
+        gear_types = ["spur gear", "worm gear", "worm drive", "rack and pinion", "planetary gear"]
+        type_map = {
+            "spur gear": "spur_gear",
+            "worm gear": "worm",
+            "worm drive": "worm_drive",
+            "rack and pinion": "rack_and_pinion",
+            "planetary gear": "planetary_gear"
+        }
+        
+        detected_type = next((t for t in gear_types if t in user_prompt.lower()), None)
+        gear_type = type_map.get(detected_type, "spur_gear")  # Default to spur_gear if not specified
+
+        # Try to extract parameters from user prompt
+        extracted_params = {}
+        param_patterns = {
+            "teeth": r"(\d+)\s*teeth",
+            "module": r"module\s*([\d\.]+)",
+            "bore": r"bore\s*([\d\.]+)",
+            "width": r"width\s*([\d\.]+)",
+            "pressure_angle": r"pressure angle\s*([\d\.]+)"
+        }
+
+        for param, pattern in param_patterns.items():
+            match = re.search(pattern, user_prompt, re.IGNORECASE)
+            if match:
+                extracted_params[param] = match.group(1)
+
+        # Find closest matching gear
+        matched_gear = self.find_matching_gear(gear_type, extracted_params)
+
+        if matched_gear:
+            # Enhance the prompt with parameter information
+            enhanced_prompt = f"""User requested: {user_prompt}
+            
+    Using standard gear parameters from set: {matched_gear['name']}
+    Key parameters:
+    - Gear type: {matched_gear['Gear_type']}
+    - Module: {matched_gear.get('Module', 'N/A')}
+    - Teeth: {matched_gear.get('teeth', 'N/A')}
+    - Bore: {matched_gear.get('bore', 'N/A')}mm
+    - Face width: {matched_gear.get('width', 'N/A')}mm
+    - Pressure angle: {matched_gear.get('pressure_angle', '20')}°
+    {f"- Worm starts: {matched_gear.get('worm_starts', 'N/A')}" if gear_type in ['worm', 'worm_drive'] else ""}
+
+    Generate OpenSCAD code for this gear using these parameters as defaults,
+    but make all parameters adjustable.
+    """
+            return enhanced_prompt
+
+        # If no match found, still give LLM some guidance
+        fallback_prompt = f"""User requested: {user_prompt}
