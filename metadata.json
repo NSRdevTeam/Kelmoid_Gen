@@ -1,0 +1,5 @@
+{
+  "name": "KelmoidAI Genesis llm: Text-to-CAD",
+  "description": "A web interface to generate CAD models from natural language descriptions using a generative AI model.",
+  "requestFramePermissions": []
+}
